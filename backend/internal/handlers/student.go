@@ -3,9 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -314,124 +312,34 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 1. Calculate items total prices and double check availability
-	tx, err := h.DB.Pool.Begin(ctx)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "transaction failed")
-		return
-	}
-	defer tx.Rollback(ctx)
-
-	var totalAmount float64
-	type ProductInfo struct {
-		Price float64
-		Name  string
-	}
-	productDetails := make(map[string]ProductInfo)
-
-	for _, item := range req.Items {
-		var price float64
-		var name string
-		var isAvailable bool
-		err = tx.QueryRow(ctx, `SELECT name, selling_price, is_available FROM products WHERE id = $1`, item.ProductID).Scan(&name, &price, &isAvailable)
-		if err != nil {
-			RespondError(w, http.StatusNotFound, "product not found: "+item.ProductID)
-			return
-		}
-		if !isAvailable {
-			RespondError(w, http.StatusBadRequest, "product is out of stock: "+name)
-			return
-		}
-
-		totalAmount += price * float64(item.Quantity)
-		productDetails[item.ProductID] = ProductInfo{Price: price, Name: name}
-	}
-
-	// 2. Generate unique order number (e.g. CB-2026-X)
-	rand.Seed(time.Now().UnixNano())
-	orderNum := fmt.Sprintf("CB-%d-%d", time.Now().Unix()%100000, rand.Intn(900)+100)
-
-	// 3. Save order header
-	var orderID string
-	insertOrder := `
-		INSERT INTO orders (order_number, student_id, room_number, building, floor, total_amount, status, special_instructions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id
-	`
-	err = tx.QueryRow(ctx, insertOrder, orderNum, studentID, req.RoomNumber, req.Building, req.Floor, totalAmount, models.OrderStatusReceived, req.SpecialInstructions).Scan(&orderID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to save order header: "+err.Error())
-		return
-	}
-
-	// 4. Save order items
-	for _, item := range req.Items {
-		insertItem := `
-			INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-			VALUES ($1, $2, $3, $4)
-		`
-		_, err = tx.Exec(ctx, insertItem, orderID, item.ProductID, item.Quantity, productDetails[item.ProductID].Price)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "failed to save order line items")
-			return
+	// 1. Enqueue the task
+	
+	taskItems := make([]models.OrderItem, len(req.Items))
+	for i, item := range req.Items {
+		taskItems[i] = models.OrderItem{
+			ProductID: item.ProductID,
+			Quantity:  item.Quantity,
 		}
 	}
 
-	// 5. Save initial history record
-	insertHistory := `
-		INSERT INTO order_status_history (order_id, status, changed_by, changed_at)
-		VALUES ($1, $2, $3, $4)
-	`
-	_, err = tx.Exec(ctx, insertHistory, orderID, models.OrderStatusReceived, studentID, time.Now())
+	task := services.OrderTask{
+		StudentID:           studentID,
+		RoomNumber:          req.RoomNumber,
+		Building:            req.Building,
+		Floor:               req.Floor,
+		SpecialInstructions: req.SpecialInstructions,
+		Items:               taskItems,
+	}
+
+	err = h.OrderQueue.Push(task)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to save order status history")
+		RespondError(w, http.StatusServiceUnavailable, "order queue is full, please try again later")
 		return
 	}
 
-	// 6. Create order in Razorpay
-	rzpOrderID, err := h.PaymentService.CreateRazorpayOrder(totalAmount)
-	if err != nil {
-		if errors.Is(err, services.ErrMinAmount) {
-			RespondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if errors.Is(err, services.ErrUnauthorized) {
-			RespondError(w, http.StatusUnauthorized, "Razorpay authentication failed")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, "failed to initiate payment gateway: "+err.Error())
-		return
-	}
-
-	// 7. Save payment record (initially created status)
-	insertPayment := `
-		INSERT INTO payments (order_id, razorpay_order_id, amount, status)
-		VALUES ($1, $2, $3, $4)
-	`
-	_, err = tx.Exec(ctx, insertPayment, orderID, rzpOrderID, totalAmount, models.PaymentStatusCreated)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to initialize payment record")
-		return
-	}
-
-	// 8. Update student's last room number for sub-30s next order auto-fill
-	_, err = tx.Exec(ctx, `UPDATE students SET last_room_number = $1 WHERE id = $2`, req.RoomNumber, studentID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to save student last room number")
-		return
-	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to commit order")
-		return
-	}
-
-	RespondJSON(w, http.StatusCreated, map[string]interface{}{
-		"order_id":          orderID,
-		"order_number":      orderNum,
-		"total_amount":      totalAmount,
-		"razorpay_order_id": rzpOrderID,
+	RespondJSON(w, http.StatusAccepted, map[string]interface{}{
+		"status":  "queued",
+		"message": "Your order has been queued due to high demand. Please check your Active Orders in a few moments to make the payment.",
 	})
 }
 
@@ -480,6 +388,16 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to finalize transaction")
 		return
+	}
+
+	// Trigger Push Notification
+	if h.FCMService != nil {
+		studentID := r.Context().Value("user_id").(string)
+		var token string
+		h.DB.Pool.QueryRow(ctx, "SELECT fcm_token FROM students WHERE id = $1 AND fcm_token IS NOT NULL", studentID).Scan(&token)
+		if token != "" {
+			_ = h.FCMService.SendToUser(ctx, token, "Order Received!", "Your payment was successful and we are preparing your order.")
+		}
 	}
 
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "payment verified and order confirmed successfully"})
@@ -642,6 +560,34 @@ func (h *HandlerContext) StudentGetHistory(w http.ResponseWriter, r *http.Reques
 	}
 
 	RespondJSON(w, http.StatusOK, list)
+}
+
+type FCMTokenRequest struct {
+	Token string `json:"token"`
+}
+
+// SaveStudentFCMToken handles saving the FCM token for the student
+func (h *HandlerContext) SaveStudentFCMToken(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("user_id").(string)
+	
+	var req FCMTokenRequest
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if req.Token == "" {
+		RespondError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	_, err := h.DB.Pool.Exec(r.Context(), "UPDATE students SET fcm_token = $1 WHERE id = $2", req.Token, studentID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to update fcm token")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]string{"message": "token saved successfully"})
 }
 
 // Helper to decode JSON bodies

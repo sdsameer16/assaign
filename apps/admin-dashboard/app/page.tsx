@@ -24,6 +24,8 @@ import {
   Eye,
   ListFilter,
   Loader2,
+  Bell,
+  MessageSquare,
 } from "lucide-react";
 import { adminApi, getToken, getProfile, logout, setSession } from "../lib/api";
 
@@ -44,6 +46,7 @@ export default function AdminDashboard() {
     | "students"
     | "partners"
     | "logs"
+    | "notifications"
   >("orders");
 
   // Inspection states
@@ -99,6 +102,12 @@ export default function AdminDashboard() {
   const [newPartnerPass, setNewPartnerPass] = useState("");
   const [partnerSaving, setPartnerSaving] = useState(false);
   const [showAddPartner, setShowAddPartner] = useState(false);
+
+  // Notification States
+  const [notificationTarget, setNotificationTarget] = useState("ALL");
+  const [notificationTitle, setNotificationTitle] = useState("");
+  const [notificationBody, setNotificationBody] = useState("");
+  const [notificationSending, setNotificationSending] = useState(false);
 
   // Search parameters
   const [studentSearch, setStudentSearch] = useState("");
@@ -510,6 +519,7 @@ export default function AdminDashboard() {
                   icon: Navigation,
                 },
                 { id: "logs", label: "Audit Trail Logs", icon: ShieldAlert },
+                { id: "notifications", label: "Push Notifications", icon: Bell },
               ].map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -2099,6 +2109,72 @@ export default function AdminDashboard() {
                       </div>
                     </form>
                   </motion.div>
+                </div>
+              )}
+
+              {/* Tab 7: Push Notifications */}
+              {activeTab === "notifications" && (
+                <div className="space-y-6">
+                  <h3 className="text-lg font-black text-white">
+                    <Bell className="w-5 h-5 inline mr-2 text-indigo-400" />
+                    Push Notifications
+                  </h3>
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                    <form onSubmit={handleSendNotification} className="space-y-6 max-w-2xl">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Target Audience</label>
+                        <select
+                          value={notificationTarget}
+                          onChange={(e) => setNotificationTarget(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-indigo-500 transition-colors"
+                        >
+                          <option value="ALL">All Registered Students (with App)</option>
+                          {students.map((st) => (
+                            <option key={st.id} value={st.id}>Student: {st.name} ({st.roll_number})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Notification Title (include Emojis! 🚀)</label>
+                        <input
+                          type="text"
+                          required
+                          value={notificationTitle}
+                          onChange={(e) => setNotificationTitle(e.target.value)}
+                          placeholder="e.g. Free Snacks! 🍟"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Message Body</label>
+                        <textarea
+                          required
+                          rows={4}
+                          value={notificationBody}
+                          onChange={(e) => setNotificationBody(e.target.value)}
+                          placeholder="Write your custom message here..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-indigo-500 transition-colors resize-none"
+                        ></textarea>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={notificationSending}
+                        className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg shadow-indigo-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {notificationSending ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <>
+                            <MessageSquare className="w-5 h-5" />
+                            <span>Send Push Notification</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
                 </div>
               )}
 

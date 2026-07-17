@@ -134,4 +134,10 @@ export const studentApi = {
   getHistory: () => apiRequest<Order[]>("/orders/history"),
 
   getCutoff: () => apiRequest<{ cutoff_time: string }>("/cutoff"),
+
+  saveFCMToken: (token: string) =>
+    apiRequest<{ message: string }>("/fcm-token", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
 };

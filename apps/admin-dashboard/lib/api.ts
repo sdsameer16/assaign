@@ -153,6 +153,12 @@ export const adminApi = {
       body: JSON.stringify({ cutoff_time: cutoffTime }),
     }),
 
+  sendNotification: (target: string, title: string, body: string) =>
+    apiRequest<{ message: string; targetCount: number }>("/send-notification", {
+      method: "POST",
+      body: JSON.stringify({ target_student: target, title, body }),
+    }),
+
   // Audit Trails
   getAuditLogs: () => apiRequest<AuditLog[]>("/audit-logs"),
 };

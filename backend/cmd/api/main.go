@@ -58,7 +58,16 @@ func main() {
 	paymentService := services.NewPaymentService(cfg.RazorpayKeyID, cfg.RazorpayKeySecret, cfg.RazorpayWebhookSecret)
 	auditService := services.NewAuditService(db)
 
-	hCtx := handlers.NewHandlerContext(db, rdb, authService, ocrService, paymentService, auditService)
+	fcmService, fcmErr := services.NewFCMService(os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	if fcmErr != nil {
+		log.Printf("Firebase FCM Service could not be initialized: %v", fcmErr)
+	}
+
+	// 3.5 Setup Queue System
+	orderQueue := services.NewOrderQueue(10000, db, paymentService)
+	orderQueue.StartWorkers(20)
+
+	hCtx := handlers.NewHandlerContext(db, rdb, authService, ocrService, paymentService, auditService, fcmService, orderQueue)
 
 	// 4. Bootstrap database tables and run seeding if database is connected
 	if db != nil {

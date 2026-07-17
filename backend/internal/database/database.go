@@ -23,8 +23,8 @@ func ConnectDB(databaseURL string) (*DB, error) {
 	}
 
 	// Set connection pool parameters
-	config.MaxConns = 25
-	config.MinConns = 3
+	config.MaxConns = 200 // Increased for 1000+ concurrent users
+	config.MinConns = 10
 	config.MaxConnLifetime = 30 * time.Minute
 	config.MaxConnIdleTime = 15 * time.Minute
 

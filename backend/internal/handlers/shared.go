@@ -17,6 +17,8 @@ type HandlerContext struct {
 	OCRService     *services.OCRService
 	PaymentService *services.PaymentService
 	AuditService   *services.AuditService
+	FCMService     *services.FCMService
+	OrderQueue     *services.OrderQueue
 }
 
 func NewHandlerContext(
@@ -26,6 +28,8 @@ func NewHandlerContext(
 	ocr *services.OCRService,
 	payment *services.PaymentService,
 	audit *services.AuditService,
+	fcm *services.FCMService,
+	orderQueue *services.OrderQueue,
 ) *HandlerContext {
 	return &HandlerContext{
 		DB:             db,
@@ -34,6 +38,8 @@ func NewHandlerContext(
 		OCRService:     ocr,
 		PaymentService: payment,
 		AuditService:   audit,
+		FCMService:     fcm,
+		OrderQueue:     orderQueue,
 	}
 }
 

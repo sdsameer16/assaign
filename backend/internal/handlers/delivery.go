@@ -213,6 +213,14 @@ func (h *HandlerContext) MarkDelivered(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.FCMService != nil {
+		var token sql.NullString
+		err := h.DB.Pool.QueryRow(ctx, "SELECT s.fcm_token FROM orders o JOIN students s ON o.student_id = s.id WHERE o.id = $1", orderID).Scan(&token)
+		if err == nil && token.Valid && token.String != "" {
+			_ = h.FCMService.SendToUser(ctx, token.String, "Order Delivered! 🍕", "Your delivery partner has marked your order as delivered. Enjoy!")
+		}
+	}
+
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "order marked as delivered"})
 }
 

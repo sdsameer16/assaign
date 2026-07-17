@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS students (
     short_name VARCHAR(100) NOT NULL,
     roll_number VARCHAR(50) UNIQUE NOT NULL,
     last_room_number VARCHAR(20),
+    fcm_token TEXT,
     verification_status verification_status DEFAULT 'pending',
     registered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

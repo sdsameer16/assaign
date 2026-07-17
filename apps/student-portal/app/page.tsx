@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { Product, Category, Student, Order } from "@campusbites/types";
+import { requestForToken, onMessageListener } from "../lib/firebase";
 import {
   studentApi,
   getProfile,
@@ -68,7 +69,7 @@ export default function StudentPortal() {
 
   // Consent Modal states
   const [showConsentModal, setShowConsentModal] = useState(false);
-  const [consentChecks, setConsentChecks] = useState([false, false, false]);
+  const [consentChecks, setConsentChecks] = useState([false, false, false, false]);
   const [consentInput, setConsentInput] = useState("");
 
   // Payment Screen states
@@ -587,6 +588,24 @@ export default function StudentPortal() {
       name: "CampusBites",
       description: `Order ${paymentData.order_number}`,
       order_id: paymentData.razorpay_order_id,
+      config: {
+        display: {
+          blocks: {
+            upi: {
+              name: "Pay using UPI",
+              instruments: [
+                {
+                  method: "upi"
+                }
+              ]
+            }
+          },
+          sequence: ["block.upi"],
+          preferences: {
+            show_default_blocks: false
+          }
+        }
+      },
       handler: async function (response: any) {
         try {
           setPaymentLoading(true);
@@ -638,9 +657,24 @@ export default function StudentPortal() {
       alert(`Ordering has closed for today at ${cutoffTime}.`);
       return;
     }
-    setConsentChecks([false, false, false]);
+    setConsentChecks([false, false, false, false]);
     setConsentInput("");
     setShowConsentModal(true);
+  };
+
+  const handleNotificationConsent = async (checked: boolean) => {
+    setConsentChecks([consentChecks[0], consentChecks[1], consentChecks[2], checked]);
+    if (checked) {
+      try {
+        const token = await requestForToken();
+        if (token) {
+          // Send to backend
+          await studentApi.saveFCMToken(token);
+        }
+      } catch (e) {
+        console.error("Failed to setup notifications", e);
+      }
+    }
   };
 
   const executeOrderPlacement = async () => {
@@ -648,6 +682,7 @@ export default function StudentPortal() {
       !consentChecks[0] ||
       !consentChecks[1] ||
       !consentChecks[2] ||
+      !consentChecks[3] ||
       consentInput.toLowerCase() !== "ok dev"
     ) {
       return;
@@ -667,13 +702,18 @@ export default function StudentPortal() {
         special_instructions: specialInstructions,
         items,
       });
-      setActivePayment(data);
+      if (data.status === "queued") {
+        alert(data.message || "Your order has been queued due to high demand. Please check your Active Orders in a few moments to make the payment.");
+        fetchHistory(); // Refresh to see active orders
+      } else {
+        setActivePayment(data);
+        // Automatically trigger the Razorpay modal
+        setTimeout(() => {
+          openRazorpayModal(data);
+        }, 100);
+      }
       setShowConsentModal(false);
       setShowCart(false);
-      // Automatically trigger the Razorpay modal
-      setTimeout(() => {
-        openRazorpayModal(data);
-      }, 100);
     } catch (e: any) {
       alert("Failed to place order: " + e.message);
     } finally {
@@ -1793,6 +1833,18 @@ export default function StudentPortal() {
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
                     We are on mission to solve problems in our own University, as a &quot;Give away&quot;
+                  </span>
+                </label>
+
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentChecks[3]}
+                    onChange={(e) => handleNotificationConsent(e.target.checked)}
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
+                  />
+                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
+                    Please select allow notification, to get real time order updates.
                   </span>
                 </label>
               </div>

@@ -37,6 +37,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Get("/orders/{id}/track", hCtx.TrackOrder)
 				r.Get("/orders/history", hCtx.StudentGetHistory)
 				r.Post("/payments/verify", hCtx.StudentVerifyPayment)
+				r.Post("/fcm-token", hCtx.SaveStudentFCMToken)
 			})
 		})
 
@@ -64,6 +65,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Get("/audit-logs", hCtx.GetAuditLogs)
 				r.Get("/cutoff", hCtx.GetCutoffTime)
 				r.Post("/cutoff", hCtx.SetCutoffTime)
+				r.Post("/send-notification", hCtx.AdminSendNotification)
 			})
 		})
 

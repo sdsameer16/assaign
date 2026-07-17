@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@campusbites/types": "*",
+    "firebase": "^12.16.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.400.0",
     "next": "16.2.10",

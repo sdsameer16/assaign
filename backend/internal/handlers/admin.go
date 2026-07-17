@@ -616,6 +616,14 @@ func (h *HandlerContext) DeliverOrder(w http.ResponseWriter, r *http.Request) {
 
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Completed counter handover for order "+orderID, r)
 
+	if h.FCMService != nil {
+		var token sql.NullString
+		err := h.DB.Pool.QueryRow(ctx, "SELECT s.fcm_token FROM orders o JOIN students s ON o.student_id = s.id WHERE o.id = $1", orderID).Scan(&token)
+		if err == nil && token.Valid && token.String != "" {
+			_ = h.FCMService.SendToUser(ctx, token.String, "Order Delivered! 🍕", "Your order has been handed over at the counter. Enjoy your meal!")
+		}
+	}
+
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "order marked as delivered"})
 }
 
@@ -686,3 +694,71 @@ func (h *HandlerContext) SetCutoffTime(w http.ResponseWriter, r *http.Request) {
 
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "order cutoff time updated successfully"})
 }
+
+type AdminNotificationRequest struct {
+	TargetStudent string `json:"target_student"` // "ALL" or specific student ID
+	Title         string `json:"title"`
+	Body          string `json:"body"`
+}
+
+// AdminSendNotification allows admins to send custom push notifications
+func (h *HandlerContext) AdminSendNotification(w http.ResponseWriter, r *http.Request) {
+	if h.FCMService == nil {
+		RespondError(w, http.StatusInternalServerError, "FCM service not initialized")
+		return
+	}
+
+	adminID := r.Context().Value("user_id").(string)
+	
+	var req AdminNotificationRequest
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if req.Title == "" || req.Body == "" {
+		RespondError(w, http.StatusBadRequest, "title and body are required")
+		return
+	}
+
+	ctx := r.Context()
+	var tokens []string
+
+	if req.TargetStudent == "ALL" {
+		rows, err := h.DB.Pool.Query(ctx, "SELECT fcm_token FROM students WHERE fcm_token IS NOT NULL AND fcm_token != ''")
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var token string
+				if err := rows.Scan(&token); err == nil {
+					tokens = append(tokens, token)
+				}
+			}
+		}
+	} else {
+		var token string
+		err := h.DB.Pool.QueryRow(ctx, "SELECT fcm_token FROM students WHERE id = $1 AND fcm_token IS NOT NULL AND fcm_token != ''", req.TargetStudent).Scan(&token)
+		if err == nil {
+			tokens = append(tokens, token)
+		}
+	}
+
+	if len(tokens) == 0 {
+		RespondJSON(w, http.StatusOK, map[string]string{"message": "No users found with valid FCM tokens"})
+		return
+	}
+
+	// Send multicast
+	err := h.FCMService.SendToTokens(ctx, tokens, req.Title, req.Body)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "Failed to send notifications")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Sent push notification: %s", req.Title), r)
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Push notification dispatched",
+		"targetCount": len(tokens),
+	})
+}
+
