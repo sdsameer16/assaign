@@ -143,44 +143,19 @@ export default function DeliveryPartnerApp() {
   const handleMarkDelivered = async (orderId: string) => {
     if (!selectedOrder) return;
 
-    const inputClean = verificationCode.trim().toUpperCase();
-    const parts = selectedOrder.order_number.split("-");
-    const allowedCodes: string[] = [];
-
-    if (parts.length > 1) {
-      allowedCodes.push(("CB-" + parts[1]).toUpperCase());
-      allowedCodes.push(parts[1].toUpperCase());
-    }
-    if (parts.length > 2) {
-      allowedCodes.push(("CB-" + parts[2]).toUpperCase());
-      allowedCodes.push(parts[2].toUpperCase());
-    }
-    allowedCodes.push(selectedOrder.order_number.toUpperCase());
-
-    const isMatched = allowedCodes.some(
-      (code) =>
-        inputClean === code ||
-        inputClean.replace(/CB-/g, "") === code.replace(/CB-/g, ""),
-    );
-
-    if (!isMatched) {
-      setCodeError(true);
-      return;
-    }
-
-    if (confirm("Are you sure you want to mark this order as DELIVERED?")) {
-      try {
-        setActionLoading(true);
+    try {
+      setActionLoading(true);
+      if (confirm("Are you sure you want to mark this order as DELIVERED?")) {
         await deliveryApi.markDelivered(orderId);
         setSelectedOrder(null);
         fetchDeliveries();
         fetchStats();
         fetchHistory();
-      } catch (e: any) {
-        alert(e.message);
-      } finally {
-        setActionLoading(false);
       }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -584,7 +559,7 @@ export default function DeliveryPartnerApp() {
                       </div>
                     </div>
 
-                    {/* Verification Code Input */}
+                    {/* Verification Code Display */}
                     <div className="space-y-2 bg-slate-950/40 p-4 border border-slate-850 rounded-2xl">
                       <div className="flex justify-between items-center">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
@@ -594,26 +569,12 @@ export default function DeliveryPartnerApp() {
                           Security Code Check
                         </span>
                       </div>
-                      <input
-                        type="text"
-                        value={verificationCode}
-                        onChange={(e) => {
-                          setVerificationCode(e.target.value);
-                          setCodeError(false);
-                        }}
-                        placeholder="e.g. CB-849201"
-                        className={`w-full bg-slate-950 border ${
-                          codeError
-                            ? "border-red-500"
-                            : "border-slate-800 focus:border-emerald-600"
-                        } rounded-xl px-4 py-3 text-center font-mono font-black text-lg tracking-widest text-white uppercase outline-none transition`}
-                      />
-                      {codeError && (
-                        <span className="text-[10px] text-red-500 font-bold block mt-1">
-                          Incorrect code! Please verify the code displayed on
-                          the student's screen.
-                        </span>
-                      )}
+                      <div className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-center font-mono font-black text-lg tracking-widest text-white uppercase outline-none transition flex items-center justify-center">
+                        CB-{selectedOrder.order_number.split("-")[1]}
+                      </div>
+                      <p className="text-[10px] text-slate-500 text-center px-4 leading-relaxed">
+                        Visually verify this code with the student's screen before handing over the package.
+                      </p>
                     </div>
 
                     {/* Action buttons (Delivered vs Missing) */}

@@ -704,7 +704,7 @@ export default function StudentPortal() {
       });
       if (data.status === "queued") {
         alert(data.message || "Your order has been queued due to high demand. Please check your Active Orders in a few moments to make the payment.");
-        fetchHistory(); // Refresh to see active orders
+        checkForActiveOrder(); // Refresh to see active orders
       } else {
         setActivePayment(data);
         // Automatically trigger the Razorpay modal

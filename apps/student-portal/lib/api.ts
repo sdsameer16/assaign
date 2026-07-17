@@ -97,6 +97,8 @@ export const studentApi = {
       order_number: string;
       total_amount: number;
       razorpay_order_id: string;
+      status?: string;
+      message?: string;
     }>("/orders", {
       method: "POST",
       body: JSON.stringify(data),
