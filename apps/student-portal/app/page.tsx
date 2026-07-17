@@ -381,8 +381,8 @@ export default function StudentPortal() {
           console.error("Cloudinary upload error:", uploadErr);
           alert(
             "ID Card photo upload to Cloudinary failed: " +
-              uploadErr.message +
-              ". Please ensure internet is active and try again.",
+            uploadErr.message +
+            ". Please ensure internet is active and try again.",
           );
           setRegIDUrl("");
           setOcrResult(null);
@@ -942,18 +942,16 @@ export default function StudentPortal() {
                     <motion.div
                       initial={{ scale: 0.95, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className={`rounded-xl p-4 space-y-2 text-xs border ${
-                        ocrResult.similarity_score >= 85
-                          ? "bg-emerald-50 border-emerald-100 text-slate-700"
-                          : "bg-amber-50 border-amber-200 text-slate-700"
-                      }`}
+                      className={`rounded-xl p-4 space-y-2 text-xs border ${ocrResult.similarity_score >= 85
+                        ? "bg-emerald-50 border-emerald-100 text-slate-700"
+                        : "bg-amber-50 border-amber-200 text-slate-700"
+                        }`}
                     >
                       <div
-                        className={`flex justify-between font-bold ${
-                          ocrResult.similarity_score >= 85
-                            ? "text-emerald-700"
-                            : "text-amber-700"
-                        }`}
+                        className={`flex justify-between font-bold ${ocrResult.similarity_score >= 85
+                          ? "text-emerald-700"
+                          : "text-amber-700"
+                          }`}
                       >
                         <span>OCR Extraction Completed</span>
                         <span>
@@ -976,11 +974,10 @@ export default function StudentPortal() {
                         <div>
                           Fuzzy Match Score:{" "}
                           <span
-                            className={`font-bold ${
-                              ocrResult.similarity_score >= 85
-                                ? "text-emerald-600"
-                                : "text-amber-600"
-                            }`}
+                            className={`font-bold ${ocrResult.similarity_score >= 85
+                              ? "text-emerald-600"
+                              : "text-amber-600"
+                              }`}
                           >
                             {ocrResult.similarity_score}%
                           </span>
@@ -1141,17 +1138,16 @@ export default function StudentPortal() {
                 {/* 2. Packing status node */}
                 <div className="flex items-start space-x-4 relative">
                   <div
-                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${
-                      [
-                        "preparing",
-                        "packed",
-                        "assigned",
-                        "out_for_delivery",
-                        "delivered",
-                      ].includes(trackingDetails.order.status)
-                        ? "bg-orange-500"
-                        : "bg-slate-200"
-                    }`}
+                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${[
+                      "preparing",
+                      "packed",
+                      "assigned",
+                      "out_for_delivery",
+                      "delivered",
+                    ].includes(trackingDetails.order.status)
+                      ? "bg-orange-500"
+                      : "bg-slate-200"
+                      }`}
                   />
                   <div>
                     <h4 className="font-bold text-slate-800 text-sm">
@@ -1166,13 +1162,12 @@ export default function StudentPortal() {
                 {/* 3. On the Way status node */}
                 <div className="flex items-start space-x-4 relative">
                   <div
-                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${
-                      ["out_for_delivery", "delivered"].includes(
-                        trackingDetails.order.status,
-                      )
-                        ? "bg-orange-500"
-                        : "bg-slate-200"
-                    }`}
+                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${["out_for_delivery", "delivered"].includes(
+                      trackingDetails.order.status,
+                    )
+                      ? "bg-orange-500"
+                      : "bg-slate-200"
+                      }`}
                   />
                   <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-slate-800 text-sm">
@@ -1210,12 +1205,11 @@ export default function StudentPortal() {
                             {[0, 1, 2, 3, 4].map((f) => (
                               <div
                                 key={f}
-                                className={`w-3.5 h-3.5 rounded-full z-10 border-2 transition-all flex items-center justify-center text-[7px] font-black ${
-                                  trackingDetails.delivery_partner
-                                    .current_floor >= f
-                                    ? "bg-orange-500 border-white text-white"
-                                    : "bg-white border-slate-300 text-slate-400"
-                                }`}
+                                className={`w-3.5 h-3.5 rounded-full z-10 border-2 transition-all flex items-center justify-center text-[7px] font-black ${trackingDetails.delivery_partner
+                                  .current_floor >= f
+                                  ? "bg-orange-500 border-white text-white"
+                                  : "bg-white border-slate-300 text-slate-400"
+                                  }`}
                               >
                                 {f}
                               </div>
@@ -1247,11 +1241,10 @@ export default function StudentPortal() {
                 {/* 4. Delivery status node */}
                 <div className="flex items-start space-x-4 relative">
                   <div
-                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${
-                      trackingDetails.order.status === "delivered"
-                        ? "bg-emerald-500"
-                        : "bg-slate-200"
-                    }`}
+                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${trackingDetails.order.status === "delivered"
+                      ? "bg-emerald-500"
+                      : "bg-slate-200"
+                      }`}
                   />
                   <div>
                     <h4 className="font-bold text-slate-800 text-sm">
@@ -1392,11 +1385,10 @@ export default function StudentPortal() {
               {/* Ticking Cutoff Timer Alert */}
               {cutoffTime !== null && (
                 <div
-                  className={`p-4 rounded-2xl flex items-center justify-between border ${
-                    countdownSeconds !== null
-                      ? "bg-orange-50 border-orange-200 text-orange-800"
-                      : "bg-red-50 border-red-200 text-red-800"
-                  }`}
+                  className={`p-4 rounded-2xl flex items-center justify-between border ${countdownSeconds !== null
+                    ? "bg-orange-50 border-orange-200 text-orange-800"
+                    : "bg-red-50 border-red-200 text-red-800"
+                    }`}
                 >
                   <div className="flex items-center space-x-2.5">
                     <Clock
@@ -1462,11 +1454,10 @@ export default function StudentPortal() {
                 <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-none">
                   <button
                     onClick={() => setSelectedCategory("all")}
-                    className={`px-4 py-2.5 rounded-xl font-bold text-xs capitalize transition ${
-                      selectedCategory === "all"
-                        ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    }`}
+                    className={`px-4 py-2.5 rounded-xl font-bold text-xs capitalize transition ${selectedCategory === "all"
+                      ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
                   >
                     All
                   </button>
@@ -1474,11 +1465,10 @@ export default function StudentPortal() {
                     <button
                       key={cat.id}
                       onClick={() => setSelectedCategory(cat.id)}
-                      className={`px-4 py-2.5 rounded-xl font-bold text-xs capitalize whitespace-nowrap transition ${
-                        selectedCategory === cat.id
-                          ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
-                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
+                      className={`px-4 py-2.5 rounded-xl font-bold text-xs capitalize whitespace-nowrap transition ${selectedCategory === cat.id
+                        ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
                     >
                       {cat.name}
                     </button>
@@ -1763,7 +1753,7 @@ export default function StudentPortal() {
               >
                 <X className="w-5 h-5" />
               </button>
-              
+
               <h2 className="text-xl sm:text-2xl font-black text-slate-800 mb-6 flex items-center space-x-2">
                 <Shield className="w-6 h-6 text-orange-500" />
                 <span>Confirm Your Order</span>
@@ -1771,11 +1761,11 @@ export default function StudentPortal() {
 
               <div className="space-y-4 mb-6">
                 <label className="flex items-start space-x-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={consentChecks[0]} 
-                    onChange={(e) => setConsentChecks([e.target.checked, consentChecks[1], consentChecks[2]])} 
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600" 
+                  <input
+                    type="checkbox"
+                    checked={consentChecks[0]}
+                    onChange={(e) => setConsentChecks([e.target.checked, consentChecks[1], consentChecks[2]])}
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
                     This is in intial stages so, Please be ready at the Old Lift steps side in the floor you mentioned..
@@ -1783,11 +1773,11 @@ export default function StudentPortal() {
                 </label>
 
                 <label className="flex items-start space-x-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={consentChecks[1]} 
-                    onChange={(e) => setConsentChecks([consentChecks[0], e.target.checked, consentChecks[2]])} 
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600" 
+                  <input
+                    type="checkbox"
+                    checked={consentChecks[1]}
+                    onChange={(e) => setConsentChecks([consentChecks[0], e.target.checked, consentChecks[2]])}
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
                     Your delivary will be brought by developers and Engineers of this website...so <i> Give Respect, Take Orders</i>
@@ -1795,14 +1785,14 @@ export default function StudentPortal() {
                 </label>
 
                 <label className="flex items-start space-x-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={consentChecks[2]} 
-                    onChange={(e) => setConsentChecks([consentChecks[0], consentChecks[1], e.target.checked])} 
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600" 
+                  <input
+                    type="checkbox"
+                    checked={consentChecks[2]}
+                    onChange={(e) => setConsentChecks([consentChecks[0], consentChecks[1], e.target.checked])}
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
-                    We are on misson to solve problems in our own university, as a &quot;Give away&quot;
+                    We are on mission to solve problems in our own University, as a &quot;Give away&quot;
                   </span>
                 </label>
               </div>
@@ -1820,7 +1810,11 @@ export default function StudentPortal() {
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 font-bold outline-none focus:bg-white focus:border-indigo-500 transition-colors text-center"
                 />
               </div>
-
+              <div className="mb-6">
+                <p className="text-[10px] text-red-500 font-bold text-center bg-red-50 p-2 rounded-lg border border-red-100">
+                  Note: We allow only paid orders by UPI. If you don't have UPI, use other methods and make payment. We take pre-paid orders only.
+                </p>
+              </div>
               <button
                 onClick={executeOrderPlacement}
                 disabled={!consentChecks[0] || !consentChecks[1] || !consentChecks[2] || consentInput.toLowerCase() !== "ok dev" || checkoutLoading}
