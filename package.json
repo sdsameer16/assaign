@@ -1,0 +1,15 @@
+{
+  "name": "campusbites",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:student": "npm run dev --workspace=apps/student-portal",
+    "dev:admin": "npm run dev --workspace=apps/admin-dashboard",
+    "dev:delivery": "npm run dev --workspace=apps/delivery-partner-app",
+    "dev:backend": "cd backend && go run cmd/api/main.go"
+  }
+}
