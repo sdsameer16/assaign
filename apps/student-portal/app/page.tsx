@@ -405,6 +405,8 @@ export default function StudentPortal() {
     }
   }, [showCamera, cameraStream]);
 
+
+
   const loadMenu = async () => {
     try {
       setMenuLoading(true);
@@ -681,6 +683,7 @@ export default function StudentPortal() {
   };
 
   const executeOrderPlacement = async () => {
+    if (!profile) return;
     if (
       !consentChecks[0] ||
       !consentChecks[1] ||
@@ -705,16 +708,13 @@ export default function StudentPortal() {
         special_instructions: specialInstructions,
         items,
       });
-      if (data.status === "queued") {
-        alert(data.message || "Your order has been queued due to high demand. Please check your Active Orders in a few moments to make the payment.");
-        checkForActiveOrder(); // Refresh to see active orders
-      } else {
-        setActivePayment(data);
-        // Automatically trigger the Razorpay modal
-        setTimeout(() => {
-          openRazorpayModal(data);
-        }, 100);
-      }
+
+      setActivePayment(data);
+      // Automatically trigger the Razorpay modal
+      setTimeout(() => {
+        openRazorpayModal(data);
+      }, 100);
+      
       setShowConsentModal(false);
       setShowCart(false);
     } catch (e: any) {

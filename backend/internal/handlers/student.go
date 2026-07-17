@@ -312,34 +312,107 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 1. Enqueue the task
-	
-	taskItems := make([]models.OrderItem, len(req.Items))
-	for i, item := range req.Items {
-		taskItems[i] = models.OrderItem{
-			ProductID: item.ProductID,
-			Quantity:  item.Quantity,
-		}
-	}
-
-	task := services.OrderTask{
-		StudentID:           studentID,
-		RoomNumber:          req.RoomNumber,
-		Building:            req.Building,
-		Floor:               req.Floor,
-		SpecialInstructions: req.SpecialInstructions,
-		Items:               taskItems,
-	}
-
-	err = h.OrderQueue.Push(task)
+	tx, err := h.DB.Pool.Begin(ctx)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "order queue is full, please try again later")
+		RespondError(w, http.StatusInternalServerError, "transaction begin failed")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var totalAmount float64
+	type ProductInfo struct {
+		Price float64
+		Name  string
+	}
+	productDetails := make(map[string]ProductInfo)
+
+	for _, item := range req.Items {
+		var price float64
+		var name string
+		var isAvailable bool
+		err = tx.QueryRow(ctx, `SELECT name, selling_price, is_available FROM products WHERE id = $1`, item.ProductID).Scan(&name, &price, &isAvailable)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "product not found: "+item.ProductID)
+			return
+		}
+		if !isAvailable {
+			RespondError(w, http.StatusBadRequest, "product out of stock: "+name)
+			return
+		}
+		totalAmount += price * float64(item.Quantity)
+		productDetails[item.ProductID] = ProductInfo{Price: price, Name: name}
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	orderNum := fmt.Sprintf("CB-%d-%d", time.Now().Unix()%100000, rand.Intn(900)+100)
+
+	var orderID string
+	insertOrder := `
+		INSERT INTO orders (order_number, student_id, room_number, building, floor, total_amount, status, special_instructions)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id
+	`
+	err = tx.QueryRow(ctx, insertOrder, orderNum, studentID, req.RoomNumber, req.Building, req.Floor, totalAmount, models.OrderStatusReceived, req.SpecialInstructions).Scan(&orderID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to save order header")
 		return
 	}
 
-	RespondJSON(w, http.StatusAccepted, map[string]interface{}{
-		"status":  "queued",
-		"message": "Your order has been queued due to high demand. Please check your Active Orders in a few moments to make the payment.",
+	for _, item := range req.Items {
+		insertItem := `
+			INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+			VALUES ($1, $2, $3, $4)
+		`
+		_, err = tx.Exec(ctx, insertItem, orderID, item.ProductID, item.Quantity, productDetails[item.ProductID].Price)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "failed to save items")
+			return
+		}
+	}
+
+	insertHistory := `
+		INSERT INTO order_status_history (order_id, status, changed_by, changed_at)
+		VALUES ($1, $2, $3, $4)
+	`
+	_, err = tx.Exec(ctx, insertHistory, orderID, models.OrderStatusReceived, studentID, time.Now())
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to save history")
+		return
+	}
+
+	rzpOrderID, err := h.PaymentService.CreateRazorpayOrder(totalAmount)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "razorpay creation failed")
+		return
+	}
+
+	insertPayment := `
+		INSERT INTO payments (order_id, razorpay_order_id, amount, status)
+		VALUES ($1, $2, $3, $4)
+	`
+	_, err = tx.Exec(ctx, insertPayment, orderID, rzpOrderID, totalAmount, models.PaymentStatusCreated)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to save payment record")
+		return
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE students SET last_room_number = $1 WHERE id = $2`, req.RoomNumber, studentID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to update room number")
+		return
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit transaction")
+		return
+	}
+
+	RespondJSON(w, http.StatusCreated, map[string]interface{}{
+		"order_id":          orderID,
+		"order_number":      orderNum,
+		"total_amount":      totalAmount,
+		"razorpay_order_id": rzpOrderID,
 	})
 }
 
