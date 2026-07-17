@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Script from "next/script";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag,
@@ -19,6 +20,7 @@ import {
   LogOut,
   Clock,
   HelpCircle,
+  Headphones,
 } from "lucide-react";
 import { Product, Category, Student, Order } from "@campusbites/types";
 import {
@@ -563,6 +565,61 @@ export default function StudentPortal() {
     return Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   };
 
+  // Open Razorpay Standard Checkout Modal
+  const openRazorpayModal = (paymentData: any) => {
+    if (!(window as any).Razorpay) {
+      alert("Razorpay SDK is not loaded yet. Please wait a second and try again.");
+      return;
+    }
+
+    const options = {
+      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_TEZ0gPAaYChb6o",
+      amount: Math.round(paymentData.total_amount * 100),
+      currency: "INR",
+      name: "CampusBites",
+      description: `Order ${paymentData.order_number}`,
+      order_id: paymentData.razorpay_order_id,
+      handler: async function (response: any) {
+        try {
+          setPaymentLoading(true);
+          await studentApi.verifyPayment({
+            order_id: paymentData.order_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+
+          // Start tracking
+          setActiveOrderID(paymentData.order_id);
+          setActivePayment(null);
+          setCart({});
+        } catch (e: any) {
+          alert("Payment verification failed: " + e.message);
+        } finally {
+          setPaymentLoading(false);
+        }
+      },
+      prefill: {
+        name: profile?.short_name || "",
+        contact: profile?.mobile_number || "",
+      },
+      theme: {
+        color: "#f97316",
+      },
+      modal: {
+        ondismiss: function () {
+          console.log("Payment modal closed by user.");
+        },
+      },
+    };
+
+    const rzp = new (window as any).Razorpay(options);
+    rzp.on("payment.failed", function (response: any) {
+      alert("Payment failed: " + response.error.description);
+    });
+    rzp.open();
+  };
+
   // Order Placement
   const handlePlaceOrder = async () => {
     if (!roomNumber || !building || !floor) {
@@ -589,41 +646,14 @@ export default function StudentPortal() {
       });
       setActivePayment(data);
       setShowCart(false);
+      // Automatically trigger the Razorpay modal
+      setTimeout(() => {
+        openRazorpayModal(data);
+      }, 100);
     } catch (e: any) {
       alert("Failed to place order: " + e.message);
     } finally {
       setCheckoutLoading(false);
-    }
-  };
-
-  // Payment Verification Simulator
-  const handleSimulatePayment = async (success: boolean) => {
-    if (!activePayment) return;
-    try {
-      setPaymentLoading(true);
-      if (success) {
-        // Call verification endpoint
-        await studentApi.verifyPayment({
-          order_id: activePayment.order_id,
-          razorpay_order_id: activePayment.razorpay_order_id,
-          razorpay_payment_id:
-            "pay_mock_" + Math.random().toString(36).substr(2, 9),
-          razorpay_signature:
-            "sig_mock_" + Math.random().toString(36).substr(2, 20),
-        });
-
-        // Start tracking
-        setActiveOrderID(activePayment.order_id);
-        setActivePayment(null);
-        setCart({});
-      } else {
-        alert("Payment verification failed.");
-        setActivePayment(null);
-      }
-    } catch (e: any) {
-      alert("Error during signature validation: " + e.message);
-    } finally {
-      setPaymentLoading(false);
     }
   };
 
@@ -667,6 +697,7 @@ export default function StudentPortal() {
 
   return (
     <div className="flex-1 bg-[#f8f9fa] text-slate-800 min-h-screen font-sans">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -1277,7 +1308,7 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {/* Razorpay Mock Checkout Overlay */}
+        {/* Razorpay Checkout Overlay */}
         {isLoggedIn && activePayment && (
           <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div
@@ -1289,14 +1320,14 @@ export default function StudentPortal() {
                 <ShoppingBag className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-extrabold text-slate-900 mb-1">
-                Razorpay Sandbox
+                Complete Payment
               </h3>
               <p className="text-xs text-slate-500 mb-6">
                 OrderID: {activePayment.razorpay_order_id}
               </p>
 
-              <div className="bg-slate-55 rounded-2xl p-4 border border-slate-200 mb-6 flex justify-between items-center text-sm">
-                <span className="text-slate-550">Total Amount:</span>
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 mb-6 flex justify-between items-center text-sm">
+                <span className="text-slate-500">Total Amount:</span>
                 <span className="font-black text-orange-600 text-lg">
                   ₹{activePayment.total_amount.toFixed(2)}
                 </span>
@@ -1304,20 +1335,25 @@ export default function StudentPortal() {
 
               <div className="space-y-3">
                 <button
-                  onClick={() => handleSimulatePayment(true)}
+                  onClick={() => openRazorpayModal(activePayment)}
                   disabled={paymentLoading}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 transition"
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 transition flex items-center justify-center space-x-2"
                 >
-                  {paymentLoading
-                    ? "Confirming signature..."
-                    : "Simulate Success Payment"}
+                  {paymentLoading ? (
+                    <>
+                      <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                      <span>Verifying Payment...</span>
+                    </>
+                  ) : (
+                    <span>Pay with Razorpay</span>
+                  )}
                 </button>
                 <button
-                  onClick={() => handleSimulatePayment(false)}
+                  onClick={() => setActivePayment(null)}
                   disabled={paymentLoading}
                   className="w-full bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 py-3 rounded-xl font-semibold text-sm transition"
                 >
-                  Cancel Transaction
+                  Cancel & Go Back
                 </button>
               </div>
             </motion.div>
@@ -1837,7 +1873,7 @@ export default function StudentPortal() {
           {showSupport ? (
             <span className="text-xl font-bold">✕</span>
           ) : (
-            <HelpCircle className="w-6 h-6 text-white" />
+            <Headphones className="w-6 h-6 text-white" />
           )}
         </button>
       </div>

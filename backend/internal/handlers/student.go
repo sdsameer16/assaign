@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"campusbites/backend/internal/models"
+	"campusbites/backend/internal/services"
 )
 
 type RegisterRequest struct {
@@ -388,7 +390,15 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 	// 6. Create order in Razorpay
 	rzpOrderID, err := h.PaymentService.CreateRazorpayOrder(totalAmount)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to initiate payment gateway")
+		if errors.Is(err, services.ErrMinAmount) {
+			RespondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, services.ErrUnauthorized) {
+			RespondError(w, http.StatusUnauthorized, "Razorpay authentication failed")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, "failed to initiate payment gateway: "+err.Error())
 		return
 	}
 
@@ -429,6 +439,11 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 	var req VerifyPaymentRequest
 	if err := jsonNewDecoder(r, &req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid payment details")
+		return
+	}
+
+	if req.OrderID == "" || req.RazorpayOrderID == "" || req.RazorpayPaymentID == "" || req.RazorpaySignature == "" {
+		RespondError(w, http.StatusBadRequest, "missing required payment verification fields")
 		return
 	}
 

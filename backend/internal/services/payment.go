@@ -1,16 +1,39 @@
 package services
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 )
+
+var (
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrMinAmount    = errors.New("amount must be at least 100 paise")
+)
+
+type RazorpayOrderRequest struct {
+	Amount   int64  `json:"amount"`
+	Currency string `json:"currency"`
+	Receipt  string `json:"receipt"`
+}
+
+type RazorpayOrderResponse struct {
+	ID       string `json:"id"`
+	Entity   string `json:"entity"`
+	Amount   int64  `json:"amount"`
+	Currency string `json:"currency"`
+	Receipt  string `json:"receipt"`
+	Status   string `json:"status"`
+}
 
 type PaymentService struct {
 	keyID         string
@@ -26,18 +49,65 @@ func NewPaymentService(keyID, keySecret, webhookSecret string) *PaymentService {
 	}
 }
 
-// CreateRazorpayOrder simulates creating an order in Razorpay's API.
-// In production, this would call https://api.razorpay.com/v1/orders.
+// CreateRazorpayOrder creates an order in Razorpay's API.
 func (ps *PaymentService) CreateRazorpayOrder(amount float64) (string, error) {
-	// Generate mock Razorpay Order ID (e.g. order_PhL2b66XFk3aM2)
-	rand.Seed(time.Now().UnixNano())
-	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, 14)
-	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
+	amountPaise := int64(amount * 100)
+	if amountPaise < 100 {
+		return "", ErrMinAmount
 	}
-	rzpOrderID := fmt.Sprintf("order_%s", string(b))
-	return rzpOrderID, nil
+
+	if ps.keyID == "" || ps.keySecret == "" {
+		return "", errors.New("razorpay credentials are not set")
+	}
+
+	// Generate a simple receipt ID
+	receipt := fmt.Sprintf("rcpt_%d", time.Now().UnixNano())
+
+	reqBody := RazorpayOrderRequest{
+		Amount:   amountPaise,
+		Currency: "INR",
+		Receipt:  receipt,
+	}
+
+	jsonReq, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", "https://api.razorpay.com/v1/orders", bytes.NewBuffer(jsonReq))
+	if err != nil {
+		return "", fmt.Errorf("failed to create http request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(ps.keyID, ps.keySecret)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", ErrUnauthorized
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("razorpay api returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var orderResp RazorpayOrderResponse
+	if err := json.Unmarshal(bodyBytes, &orderResp); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return orderResp.ID, nil
 }
 
 // VerifyWebhookSignature verifies the payload signature from Razorpay.
