@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"campusbites/backend/internal/models"
-	"campusbites/backend/internal/services"
+	"math/rand"
 )
 
 type RegisterRequest struct {
