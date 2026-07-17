@@ -1200,38 +1200,26 @@ export default function AdminDashboard() {
                                   </span>
                                 </td>
                                 <td className="p-4 text-right">
-                                  {student.verification_status === "pending" ? (
-                                    <div className="inline-flex space-x-1">
+                                  <div className="inline-flex space-x-1">
+                                    {student.verification_status !== "verified" && (
                                       <button
-                                        onClick={() =>
-                                          handleStudentApproval(
-                                            student.id,
-                                            true,
-                                          )
-                                        }
+                                        onClick={() => handleStudentApproval(student.id, true)}
                                         className="bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded-lg"
-                                        title="Approve student"
+                                        title="Unblock student"
                                       >
                                         <Check className="w-3.5 h-3.5" />
                                       </button>
+                                    )}
+                                    {student.verification_status !== "rejected" && (
                                       <button
-                                        onClick={() =>
-                                          handleStudentApproval(
-                                            student.id,
-                                            false,
-                                          )
-                                        }
+                                        onClick={() => handleStudentApproval(student.id, false)}
                                         className="bg-red-650 hover:bg-red-600 text-white p-1.5 rounded-lg"
-                                        title="Reject student"
+                                        title="Block student"
                                       >
                                         <X className="w-3.5 h-3.5" />
                                       </button>
-                                    </div>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-500 font-semibold italic">
-                                      Decision logged
-                                    </span>
-                                  )}
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))

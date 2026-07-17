@@ -93,11 +93,12 @@ func (h *HandlerContext) StudentRegister(w http.ResponseWriter, r *http.Request)
 		doc.ConfidenceLevel = models.ConfidenceLevelLow
 	}
 
-	// Determine initial verification status
-	verificationStatus := models.VerificationStatusPending
-	if doc.ConfidenceLevel == models.ConfidenceLevelHigh && !doc.DuplicateFlag {
-		verificationStatus = models.VerificationStatusVerified
+	if doc.NameSimilarityScore < 60.0 {
+		RespondError(w, http.StatusBadRequest, "Please scan your ID card properly, by cleaning the lens.")
+		return
 	}
+
+	verificationStatus := models.VerificationStatusVerified
 
 	// 3. Begin Transaction to insert student + document
 	tx, err := h.DB.Pool.Begin(ctx)
@@ -305,11 +306,11 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 
-	// Check if student is verified
+	// Check if student is blocked
 	var status string
 	err := h.DB.Pool.QueryRow(ctx, `SELECT verification_status FROM students WHERE id = $1`, studentID).Scan(&status)
-	if err != nil || status != models.VerificationStatusVerified {
-		RespondError(w, http.StatusForbidden, "your student ID verification is pending admin review")
+	if err != nil || status == models.VerificationStatusRejected {
+		RespondError(w, http.StatusForbidden, "your account is blocked by an admin")
 		return
 	}
 

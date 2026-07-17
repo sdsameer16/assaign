@@ -21,6 +21,7 @@ import {
   Clock,
   HelpCircle,
   Headphones,
+  X,
 } from "lucide-react";
 import { Product, Category, Student, Order } from "@campusbites/types";
 import {
@@ -64,6 +65,11 @@ export default function StudentPortal() {
   const [floor, setFloor] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  // Consent Modal states
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentChecks, setConsentChecks] = useState([false, false, false]);
+  const [consentInput, setConsentInput] = useState("");
 
   // Payment Screen states
   const [activePayment, setActivePayment] = useState<any>(null);
@@ -623,7 +629,7 @@ export default function StudentPortal() {
   };
 
   // Order Placement
-  const handlePlaceOrder = async () => {
+  const proceedToConsent = () => {
     if (!roomNumber || !building || !floor) {
       alert("Please fill in room details.");
       return;
@@ -632,6 +638,21 @@ export default function StudentPortal() {
       alert(`Ordering has closed for today at ${cutoffTime}.`);
       return;
     }
+    setConsentChecks([false, false, false]);
+    setConsentInput("");
+    setShowConsentModal(true);
+  };
+
+  const executeOrderPlacement = async () => {
+    if (
+      !consentChecks[0] ||
+      !consentChecks[1] ||
+      !consentChecks[2] ||
+      consentInput.toLowerCase() !== "ok dev"
+    ) {
+      return;
+    }
+
     const items = Object.entries(cart).map(([id, qty]) => ({
       product_id: id,
       quantity: qty,
@@ -647,6 +668,7 @@ export default function StudentPortal() {
         items,
       });
       setActivePayment(data);
+      setShowConsentModal(false);
       setShowCart(false);
       // Automatically trigger the Razorpay modal
       setTimeout(() => {
@@ -1693,7 +1715,7 @@ export default function StudentPortal() {
                     </div>
 
                     <button
-                      onClick={handlePlaceOrder}
+                      onClick={proceedToConsent}
                       disabled={
                         checkoutLoading ||
                         !roomNumber ||
@@ -1724,6 +1746,99 @@ export default function StudentPortal() {
           </div>
         )}
       </main>
+
+      {/* Consent Modal Overlay */}
+      <AnimatePresence>
+        {showConsentModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative select-none"
+            >
+              <button
+                onClick={() => setShowConsentModal(false)}
+                className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <h2 className="text-xl sm:text-2xl font-black text-slate-800 mb-6 flex items-center space-x-2">
+                <Shield className="w-6 h-6 text-orange-500" />
+                <span>Confirm Your Order</span>
+              </h2>
+
+              <div className="space-y-4 mb-6">
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={consentChecks[0]} 
+                    onChange={(e) => setConsentChecks([e.target.checked, consentChecks[1], consentChecks[2]])} 
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600" 
+                  />
+                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
+                    This is in intial stages so, Please be ready at the Old Lift steps side in the floor you mentioned..
+                  </span>
+                </label>
+
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={consentChecks[1]} 
+                    onChange={(e) => setConsentChecks([consentChecks[0], e.target.checked, consentChecks[2]])} 
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600" 
+                  />
+                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
+                    Your delivary will be brought by developers and Engineers of this website...so <i> Give Respect, Take Orders</i>
+                  </span>
+                </label>
+
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={consentChecks[2]} 
+                    onChange={(e) => setConsentChecks([consentChecks[0], consentChecks[1], e.target.checked])} 
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600" 
+                  />
+                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
+                    We are on misson to solve problems in our own university, as a &quot;Give away&quot;
+                  </span>
+                </label>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Please type <span className="text-indigo-600 font-black">&quot;ok dev&quot;</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={consentInput}
+                  onChange={(e) => setConsentInput(e.target.value)}
+                  onPaste={(e) => e.preventDefault()}
+                  placeholder="ok dev"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 font-bold outline-none focus:bg-white focus:border-indigo-500 transition-colors text-center"
+                />
+              </div>
+
+              <button
+                onClick={executeOrderPlacement}
+                disabled={!consentChecks[0] || !consentChecks[1] || !consentChecks[2] || consentInput.toLowerCase() !== "ok dev" || checkoutLoading}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black py-4 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {checkoutLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <ShoppingBag className="w-5 h-5" />
+                    <span>Proceed to Pay</span>
+                  </>
+                )}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Live Camera Scanner Overlay Modal */}
       <AnimatePresence>
