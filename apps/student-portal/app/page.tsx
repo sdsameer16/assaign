@@ -108,7 +108,10 @@ export default function StudentPortal() {
       const history = await studentApi.getHistory();
       if (history && history.length > 0) {
         const active = history.find(
-          (o) => o.status !== "delivered" && o.status !== "cancelled",
+          (o) =>
+            o.status !== "delivered" &&
+            o.status !== "cancelled" &&
+            o.payment_status === "paid",
         );
         if (active) {
           setActiveOrderID(active.id);
