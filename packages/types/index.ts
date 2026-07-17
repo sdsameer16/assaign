@@ -82,6 +82,7 @@ export interface Order {
   floor: number;
   total_amount: number;
   status: OrderStatus;
+  payment_status?: string;
   special_instructions?: string;
   created_at: string;
   items?: OrderItem[];
