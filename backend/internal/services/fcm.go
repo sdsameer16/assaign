@@ -16,12 +16,15 @@ type FCMService struct {
 }
 
 // NewFCMService initializes the Firebase Cloud Messaging client.
-func NewFCMService(credentialsFile string) (*FCMService, error) {
+func NewFCMService(credentialsFile string, credentialsJSON string) (*FCMService, error) {
 	ctx := context.Background()
 	var app *firebase.App
 	var err error
 
-	if credentialsFile != "" {
+	if credentialsJSON != "" {
+		opt := option.WithCredentialsJSON([]byte(credentialsJSON))
+		app, err = firebase.NewApp(ctx, nil, opt)
+	} else if credentialsFile != "" {
 		opt := option.WithCredentialsFile(credentialsFile)
 		app, err = firebase.NewApp(ctx, nil, opt)
 	} else {

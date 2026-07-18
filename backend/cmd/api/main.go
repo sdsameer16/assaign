@@ -58,7 +58,7 @@ func main() {
 	paymentService := services.NewPaymentService(cfg.RazorpayKeyID, cfg.RazorpayKeySecret, cfg.RazorpayWebhookSecret)
 	auditService := services.NewAuditService(db)
 
-	fcmService, fcmErr := services.NewFCMService(os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	fcmService, fcmErr := services.NewFCMService(os.Getenv("FIREBASE_CREDENTIALS_FILE"), os.Getenv("FIREBASE_CREDENTIALS_JSON"))
 	if fcmErr != nil {
 		log.Printf("Firebase FCM Service could not be initialized: %v", fcmErr)
 	}
