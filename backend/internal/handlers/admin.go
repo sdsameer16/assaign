@@ -751,7 +751,7 @@ func (h *HandlerContext) AdminSendNotification(w http.ResponseWriter, r *http.Re
 	// Send multicast
 	err := h.FCMService.SendToTokens(ctx, tokens, req.Title, req.Body)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "Failed to send notifications")
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to send notifications: %v", err))
 		return
 	}
 
