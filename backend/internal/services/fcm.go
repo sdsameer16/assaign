@@ -86,7 +86,7 @@ func (f *FCMService) SendToTokens(ctx context.Context, tokens []string, title, b
 		Tokens: tokens,
 	}
 
-	response, err := f.client.SendMulticast(ctx, message)
+	response, err := f.client.SendEachForMulticast(ctx, message)
 	if err != nil {
 		log.Printf("Failure sending FCM multicast: %v", err)
 		return err
