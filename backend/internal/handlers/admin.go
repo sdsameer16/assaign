@@ -744,7 +744,7 @@ func (h *HandlerContext) AdminSendNotification(w http.ResponseWriter, r *http.Re
 	}
 
 	if len(tokens) == 0 {
-		RespondJSON(w, http.StatusOK, map[string]string{"message": "No users found with valid FCM tokens"})
+		RespondJSON(w, http.StatusOK, map[string]interface{}{"message": "No users found with valid FCM tokens", "targetCount": 0})
 		return
 	}
 
