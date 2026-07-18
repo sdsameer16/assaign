@@ -401,6 +401,29 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notificationTitle || !notificationBody) return;
+    try {
+      setNotificationSending(true);
+      const res = await adminApi.sendNotification(
+        notificationTarget,
+        notificationTitle,
+        notificationBody
+      );
+      showToast(
+        `${res.message} (Targeted: ${res.targetCount})`,
+        "success"
+      );
+      setNotificationTitle("");
+      setNotificationBody("");
+    } catch (err: any) {
+      showToast(err.message || "Failed to send notification", "error");
+    } finally {
+      setNotificationSending(false);
+    }
+  };
+
   // Searching filters
   const filteredStudents = students.filter(
     (s) =>

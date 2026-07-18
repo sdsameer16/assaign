@@ -34,7 +34,8 @@ bin/
 out/
 build/
 dist/
-
+# Firebase service account
+backend/firebase-credentials.json
 # OS specific files
 .DS_Store
 .DS_Store?
@@ -48,3 +49,12 @@ Thumbs.db
 .node_tmp/
 coverage/
 .vercel
+
+# Secrets and credentials
+firebase-credentials.json
+*.json.json
+
+# Go binaries
+backend/api
+backend/main
+backend/main.exe
