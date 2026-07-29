@@ -67,6 +67,11 @@ export default function StudentPortal() {
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
+  // Privacy Policy states
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [privacyChecked, setPrivacyChecked] = useState(false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+
   // Consent Modal states
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [consentChecks, setConsentChecks] = useState([false, false, false, false]);
@@ -98,10 +103,34 @@ export default function StudentPortal() {
       setIsLoggedIn(true);
       setRoomNumber(savedProfile.last_room_number || "");
       checkForActiveOrder();
+      checkPrivacyStatus();
     }
     loadMenu();
     fetchCutoffConfig();
   }, []);
+
+  const checkPrivacyStatus = async () => {
+    try {
+      const res = await studentApi.getPrivacy();
+      if (!res.accepted) {
+        setShowPrivacyModal(true);
+      }
+    } catch (e) {
+      console.error("Failed to check privacy status:", e);
+    }
+  };
+
+  const handleAcceptPrivacy = async () => {
+    setPrivacyLoading(true);
+    try {
+      await studentApi.acceptPrivacy();
+      setShowPrivacyModal(false);
+    } catch (e) {
+      alert("Failed to accept privacy policy. Please try again.");
+    } finally {
+      setPrivacyLoading(false);
+    }
+  };
 
   const checkForActiveOrder = async () => {
     try {
@@ -363,6 +392,7 @@ export default function StudentPortal() {
       setRoomNumber(data.student.last_room_number || "");
       setIsLoggedIn(true);
       checkForActiveOrder();
+      checkPrivacyStatus();
     } catch (err: any) {
       if (err.message.includes("not found")) {
         setIsRegistering(true);
@@ -408,6 +438,7 @@ export default function StudentPortal() {
       setIsRegistering(false);
       setOcrResult(null);
       checkForActiveOrder();
+      checkPrivacyStatus();
     } catch (err: any) {
       alert("Registration failed: " + err.message);
     } finally {
@@ -825,6 +856,9 @@ export default function StudentPortal() {
                         className="w-full pl-14 pr-4 py-3.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-orange-500 rounded-xl outline-none text-slate-900 font-medium text-sm transition"
                       />
                     </div>
+                    <p className="text-[11px] text-orange-600 font-semibold mt-1.5">
+                      Enter correct mobile number, we use that for calling at the time of Delivery.
+                    </p>
                   </div>
 
                   <button
@@ -1738,6 +1772,53 @@ export default function StudentPortal() {
           </div>
         )}
       </main>
+
+      {/* Privacy Policy Modal */}
+      <AnimatePresence>
+        {showPrivacyModal && (
+          <div className="fixed inset-0 z-[60] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl"
+            >
+              <h2 className="text-xl font-black text-slate-900 mb-3">Privacy Policy</h2>
+              <div className="text-sm text-slate-600 space-y-3 mb-5">
+                <p>We take your privacy seriously. Here is what you should know:</p>
+                <ul className="list-disc pl-5 space-y-1.5">
+                  <li>We <strong>only deliver your order</strong> — we do not prepare food.</li>
+                  <li>Your phone number is used <strong>solely for delivery coordination</strong> and will <strong>not</strong> be used for promotions or shared with third parties.</li>
+                  <li>Your ID card data is used only for identity verification and is stored securely.</li>
+                </ul>
+                <p>
+                  Read our full{" "}
+                  <a href="/privacy-policy" target="_blank" className="text-orange-600 underline font-semibold">
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              </div>
+              <label className="flex items-center space-x-3 cursor-pointer mb-5">
+                <input
+                  type="checkbox"
+                  checked={privacyChecked}
+                  onChange={(e) => setPrivacyChecked(e.target.checked)}
+                  className="w-5 h-5 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
+                />
+                <span className="text-sm text-slate-700 font-medium">I have read and agree to the Privacy Policy</span>
+              </label>
+              <button
+                onClick={handleAcceptPrivacy}
+                disabled={!privacyChecked || privacyLoading}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {privacyLoading ? "Accepting..." : "Accept & Continue"}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Consent Modal Overlay */}
       <AnimatePresence>

@@ -833,6 +833,35 @@ func (h *HandlerContext) SaveStudentFCMToken(w http.ResponseWriter, r *http.Requ
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "token saved successfully"})
 }
 
+// GetPrivacyStatus returns whether the student has accepted the privacy policy
+func (h *HandlerContext) GetPrivacyStatus(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("user_id").(string)
+
+	var accepted bool
+	err := h.DB.Pool.QueryRow(r.Context(),
+		"SELECT COALESCE(privacy_accepted, false) FROM students WHERE id = $1", studentID).Scan(&accepted)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to fetch privacy status")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]bool{"accepted": accepted})
+}
+
+// AcceptPrivacy marks the student as having accepted the privacy policy
+func (h *HandlerContext) AcceptPrivacy(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("user_id").(string)
+
+	_, err := h.DB.Pool.Exec(r.Context(),
+		"UPDATE students SET privacy_accepted = true, privacy_accepted_at = NOW() WHERE id = $1", studentID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to accept privacy policy")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]string{"message": "privacy policy accepted"})
+}
+
 // Helper to decode JSON bodies
 func jsonNewDecoder(r *http.Request, v interface{}) error {
 	return json.NewDecoder(r.Body).Decode(v)

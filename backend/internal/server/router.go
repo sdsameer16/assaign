@@ -37,6 +37,8 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Use(customMiddleware.AuthMiddleware(hCtx.AuthService))
 				r.Use(customMiddleware.RequireRole("student"))
 
+				r.Get("/privacy", hCtx.GetPrivacyStatus)
+				r.Post("/privacy/accept", hCtx.AcceptPrivacy)
 				r.Post("/orders", hCtx.StudentCreateOrder)
 				r.Get("/orders/history", hCtx.StudentGetHistory)
 				r.Get("/orders/{id}/track", hCtx.TrackOrder)

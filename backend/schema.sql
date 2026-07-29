@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS students (
     last_room_number VARCHAR(20),
     fcm_token TEXT,
     verification_status verification_status DEFAULT 'pending',
-    registered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    registered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    privacy_accepted BOOLEAN DEFAULT FALSE,
+    privacy_accepted_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Create index on mobile number for rapid lookup on logins

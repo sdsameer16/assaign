@@ -167,4 +167,11 @@ export const studentApi = {
       method: "POST",
       body: JSON.stringify({ token }),
     }),
+
+  getPrivacy: () => apiRequest<{ accepted: boolean }>("/privacy"),
+
+  acceptPrivacy: () =>
+    apiRequest<{ message: string }>("/privacy/accept", {
+      method: "POST",
+    }),
 };
