@@ -153,6 +153,38 @@ func (h *HandlerContext) StudentRegister(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+type OCRPreviewRequest struct {
+	ShortName  string `json:"short_name"`
+	RollNumber string `json:"roll_number"`
+	IDCardURL  string `json:"id_card_url"`
+}
+
+// StudentOCRPreview runs server-side OCR against an uploaded ID card image (public, used during registration).
+func (h *HandlerContext) StudentOCRPreview(w http.ResponseWriter, r *http.Request) {
+	var req OCRPreviewRequest
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.ShortName == "" || req.RollNumber == "" || req.IDCardURL == "" {
+		RespondError(w, http.StatusBadRequest, "short_name, roll_number, and id_card_url are required")
+		return
+	}
+
+	doc, err := h.OCRService.ProcessVerification(req.ShortName, req.RollNumber, req.IDCardURL)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"extracted_name":   doc.OCRExtractedName,
+		"extracted_roll":   doc.OCRExtractedRollNumber,
+		"similarity_score": doc.NameSimilarityScore,
+		"confidence":       doc.ConfidenceLevel,
+	})
+}
+
 // StudentLogin handles mobile login and returns token + details for returning students.
 func (h *HandlerContext) StudentLogin(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
@@ -304,6 +336,24 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 
+	// Cancel stale unpaid orders for this student (older than 30 minutes)
+	_, _ = h.DB.Pool.Exec(ctx, `
+		WITH stale AS (
+			SELECT o.id
+			FROM orders o
+			JOIN payments p ON p.order_id = o.id
+			WHERE o.student_id = $1
+			  AND o.status = $2
+			  AND p.status = $3
+			  AND o.created_at < NOW() - INTERVAL '30 minutes'
+		),
+		cancel_orders AS (
+			UPDATE orders SET status = $4 WHERE id IN (SELECT id FROM stale) RETURNING id
+		)
+		UPDATE payments SET status = $5
+		WHERE order_id IN (SELECT id FROM cancel_orders) AND status = $3
+	`, studentID, models.OrderStatusReceived, models.PaymentStatusCreated, models.OrderStatusCancelled, models.PaymentStatusFailed)
+
 	// Check if student is blocked
 	var status string
 	err := h.DB.Pool.QueryRow(ctx, `SELECT verification_status FROM students WHERE id = $1`, studentID).Scan(&status)
@@ -312,25 +362,22 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tx, err := h.DB.Pool.Begin(ctx)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "transaction begin failed")
-		return
-	}
-	defer tx.Rollback(ctx)
-
-	var totalAmount float64
 	type ProductInfo struct {
 		Price float64
 		Name  string
 	}
 	productDetails := make(map[string]ProductInfo)
+	var totalAmount float64
 
 	for _, item := range req.Items {
+		if item.Quantity <= 0 {
+			RespondError(w, http.StatusBadRequest, "quantity must be greater than zero")
+			return
+		}
 		var price float64
 		var name string
 		var isAvailable bool
-		err = tx.QueryRow(ctx, `SELECT name, selling_price, is_available FROM products WHERE id = $1`, item.ProductID).Scan(&name, &price, &isAvailable)
+		err = h.DB.Pool.QueryRow(ctx, `SELECT name, selling_price, is_available FROM products WHERE id = $1`, item.ProductID).Scan(&name, &price, &isAvailable)
 		if err != nil {
 			RespondError(w, http.StatusBadRequest, "product not found: "+item.ProductID)
 			return
@@ -342,6 +389,20 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		totalAmount += price * float64(item.Quantity)
 		productDetails[item.ProductID] = ProductInfo{Price: price, Name: name}
 	}
+
+	// Create Razorpay order outside the DB transaction to avoid holding locks during HTTP I/O
+	rzpOrderID, err := h.PaymentService.CreateRazorpayOrder(totalAmount)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "razorpay creation failed")
+		return
+	}
+
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "transaction begin failed")
+		return
+	}
+	defer tx.Rollback(ctx)
 
 	rand.Seed(time.Now().UnixNano())
 	orderNum := fmt.Sprintf("CB-%d-%d", time.Now().Unix()%100000, rand.Intn(900)+100)
@@ -380,12 +441,6 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	rzpOrderID, err := h.PaymentService.CreateRazorpayOrder(totalAmount)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "razorpay creation failed")
-		return
-	}
-
 	insertPayment := `
 		INSERT INTO payments (order_id, razorpay_order_id, amount, status)
 		VALUES ($1, $2, $3, $4)
@@ -418,6 +473,8 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 
 // StudentVerifyPayment checks payment signatures and marks the order as paid.
 func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("user_id").(string)
+
 	var req VerifyPaymentRequest
 	if err := jsonNewDecoder(r, &req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid payment details")
@@ -429,7 +486,6 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Verify signature cryptographically using our PaymentService
 	err := h.PaymentService.VerifyPaymentSignature(req.RazorpayOrderID, req.RazorpayPaymentID, req.RazorpaySignature)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid payment signature: "+err.Error())
@@ -437,6 +493,28 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 	}
 
 	ctx := r.Context()
+
+	// Idempotent success if already paid for this student's order
+	var currentStatus string
+	err = h.DB.Pool.QueryRow(ctx, `
+		SELECT p.status
+		FROM payments p
+		JOIN orders o ON o.id = p.order_id
+		WHERE p.order_id = $1 AND p.razorpay_order_id = $2 AND o.student_id = $3
+	`, req.OrderID, req.RazorpayOrderID, studentID).Scan(&currentStatus)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "payment record not found for this order")
+		return
+	}
+	if currentStatus == models.PaymentStatusPaid {
+		RespondJSON(w, http.StatusOK, map[string]string{"message": "payment already verified"})
+		return
+	}
+	if currentStatus != models.PaymentStatusCreated {
+		RespondError(w, http.StatusBadRequest, "payment cannot be verified in status: "+currentStatus)
+		return
+	}
+
 	tx, err := h.DB.Pool.Begin(ctx)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "transaction failed")
@@ -444,28 +522,33 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 	}
 	defer tx.Rollback(ctx)
 
-	// Update payment record status
 	updatePayment := `
-		UPDATE payments 
+		UPDATE payments p
 		SET status = $1, razorpay_payment_id = $2, razorpay_signature = $3
-		WHERE order_id = $4 AND razorpay_order_id = $5
+		FROM orders o
+		WHERE p.order_id = o.id
+		  AND p.order_id = $4
+		  AND p.razorpay_order_id = $5
+		  AND o.student_id = $6
+		  AND p.status = $7
 	`
-	_, err = tx.Exec(ctx, updatePayment, models.PaymentStatusPaid, req.RazorpayPaymentID, req.RazorpaySignature, req.OrderID, req.RazorpayOrderID)
+	res, err := tx.Exec(ctx, updatePayment, models.PaymentStatusPaid, req.RazorpayPaymentID, req.RazorpaySignature, req.OrderID, req.RazorpayOrderID, studentID, models.PaymentStatusCreated)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to update payment records")
 		return
 	}
+	if res.RowsAffected() != 1 {
+		RespondError(w, http.StatusConflict, "payment was not updated; it may already be processed")
+		return
+	}
 
-	// Keep order in received state, but verified
 	err = tx.Commit(ctx)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to finalize transaction")
 		return
 	}
 
-	// Trigger Push Notification
 	if h.FCMService != nil {
-		studentID := r.Context().Value("user_id").(string)
 		var token string
 		h.DB.Pool.QueryRow(ctx, "SELECT fcm_token FROM students WHERE id = $1 AND fcm_token IS NOT NULL", studentID).Scan(&token)
 		if token != "" {
@@ -476,9 +559,96 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "payment verified and order confirmed successfully"})
 }
 
+// GetPaymentStatus returns payment/order status for the authenticated student owner.
+func (h *HandlerContext) GetPaymentStatus(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("user_id").(string)
+	orderID := getRouteParam(r, "id")
+	ctx := r.Context()
+
+	var paymentStatus, orderStatus string
+	err := h.DB.Pool.QueryRow(ctx, `
+		SELECT p.status, o.status
+		FROM orders o
+		JOIN payments p ON p.order_id = o.id
+		WHERE o.id = $1 AND o.student_id = $2
+	`, orderID, studentID).Scan(&paymentStatus, &orderStatus)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "order not found")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]string{
+		"payment_status": paymentStatus,
+		"order_status":   orderStatus,
+	})
+}
+
+// CancelUnpaidOrder cancels an unpaid order owned by the authenticated student.
+func (h *HandlerContext) CancelUnpaidOrder(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("user_id").(string)
+	orderID := getRouteParam(r, "id")
+	ctx := r.Context()
+
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "transaction failed")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var paymentStatus, orderStatus string
+	err = tx.QueryRow(ctx, `
+		SELECT p.status, o.status
+		FROM orders o
+		JOIN payments p ON p.order_id = o.id
+		WHERE o.id = $1 AND o.student_id = $2
+	`, orderID, studentID).Scan(&paymentStatus, &orderStatus)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "order not found")
+		return
+	}
+
+	if paymentStatus != models.PaymentStatusCreated {
+		RespondError(w, http.StatusBadRequest, "only unpaid orders can be cancelled by the student")
+		return
+	}
+	if orderStatus == models.OrderStatusCancelled {
+		RespondJSON(w, http.StatusOK, map[string]string{"message": "order already cancelled"})
+		return
+	}
+	if orderStatus != models.OrderStatusReceived {
+		RespondError(w, http.StatusBadRequest, "order cannot be cancelled in current status")
+		return
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE payments SET status = $1 WHERE order_id = $2`, models.PaymentStatusFailed, orderID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to update payment")
+		return
+	}
+	_, err = tx.Exec(ctx, `UPDATE orders SET status = $1 WHERE id = $2`, models.OrderStatusCancelled, orderID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to cancel order")
+		return
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, $2, $3)`, orderID, models.OrderStatusCancelled, studentID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to write status history")
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit cancel")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]string{"message": "unpaid order cancelled"})
+}
+
 // TrackOrder returns real-time tracking information including floor and partner locations.
 func (h *HandlerContext) TrackOrder(w http.ResponseWriter, r *http.Request) {
 	orderID := getRouteParam(r, "id")
+	studentID := r.Context().Value("user_id").(string)
 	ctx := r.Context()
 
 	// Load order, status, building details
@@ -496,9 +666,9 @@ func (h *HandlerContext) TrackOrder(w http.ResponseWriter, r *http.Request) {
 		JOIN payments p ON o.id = p.order_id
 		LEFT JOIN delivery_assignments da ON o.id = da.order_id
 		LEFT JOIN delivery_partners dp ON da.delivery_partner_id = dp.id
-		WHERE o.id = $1
+		WHERE o.id = $1 AND o.student_id = $2
 	`
-	err := h.DB.Pool.QueryRow(ctx, query, orderID).Scan(
+	err := h.DB.Pool.QueryRow(ctx, query, orderID, studentID).Scan(
 		&order.ID,
 		&order.OrderNumber,
 		&order.RoomNumber,

@@ -177,12 +177,26 @@ func (h *HandlerContext) MarkDelivered(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 
-	// Verify order is assigned to this partner
-	var exists bool
-	checkQuery := `SELECT EXISTS(SELECT 1 FROM delivery_assignments WHERE order_id = $1 AND delivery_partner_id = $2)`
-	err = tx.QueryRow(ctx, checkQuery, orderID, partnerID).Scan(&exists)
-	if err != nil || !exists {
+	// Verify assignment, payment paid, and valid status transition
+	var orderStatus, paymentStatus string
+	checkQuery := `
+		SELECT o.status, p.status
+		FROM delivery_assignments da
+		JOIN orders o ON o.id = da.order_id
+		JOIN payments p ON p.order_id = o.id
+		WHERE da.order_id = $1 AND da.delivery_partner_id = $2
+	`
+	err = tx.QueryRow(ctx, checkQuery, orderID, partnerID).Scan(&orderStatus, &paymentStatus)
+	if err != nil {
 		RespondError(w, http.StatusForbidden, "unauthorized: order not assigned to you")
+		return
+	}
+	if paymentStatus != models.PaymentStatusPaid {
+		RespondError(w, http.StatusBadRequest, "cannot deliver unpaid order")
+		return
+	}
+	if orderStatus != models.OrderStatusAssigned && orderStatus != models.OrderStatusOutForDelivery {
+		RespondError(w, http.StatusBadRequest, "order cannot be delivered in status: "+orderStatus)
 		return
 	}
 

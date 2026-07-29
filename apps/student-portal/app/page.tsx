@@ -197,43 +197,42 @@ export default function StudentPortal() {
     return () => clearInterval(interval);
   }, [activeOrderID]);
 
-  const simulateOcrText = (text: string): string => {
-    if (!text || text.length < 3) return text;
-    const chars = text.split("");
-    let replaced = false;
-    for (let i = 0; i < chars.length; i++) {
-      const c = chars[i];
-      if (c === "o" || c === "O") {
-        chars[i] = "0";
-        replaced = true;
-      } else if (c === "s" || c === "S") {
-        chars[i] = "5";
-        replaced = true;
-      } else if (c === "i" || c === "I") {
-        chars[i] = "1";
-        replaced = true;
-      }
-      if (replaced) break; // Replace only one character for realistic high-confidence match
+  const runServerOcrPreview = async (idCardUrl: string) => {
+    if (!regName.trim() || !regRoll.trim() || !idCardUrl) return;
+    setOcrLoading(true);
+    try {
+      const result = await studentApi.previewOcr({
+        short_name: regName.trim(),
+        roll_number: regRoll.trim(),
+        id_card_url: idCardUrl,
+      });
+      setOcrResult({
+        extracted_name: result.extracted_name,
+        extracted_roll: result.extracted_roll,
+        similarity_score: result.similarity_score,
+        confidence: result.confidence,
+      });
+    } catch (ocrErr: any) {
+      console.warn("OCR preview failed:", ocrErr);
+      setOcrResult(null);
+      alert(
+        ocrErr?.message ||
+          "Could not read your ID card. Please retake a clear photo and try again.",
+      );
+    } finally {
+      setOcrLoading(false);
     }
-    if (!replaced && chars.length > 2) {
-      const temp = chars[chars.length - 1];
-      chars[chars.length - 1] = chars[chars.length - 2];
-      chars[chars.length - 2] = temp;
-    }
-    return chars.join("");
   };
 
-  const calculateSimilarityScore = (s1: string, s2: string): number => {
-    if (s1 === s2) return 100;
-    let distance = 0;
-    const len = Math.max(s1.length, s2.length);
-    for (let i = 0; i < len; i++) {
-      if (s1[i] !== s2[i]) {
-        distance++;
+  const updateConsentCheck = (index: number, value: boolean) => {
+    setConsentChecks((prev) => {
+      const next = [false, false, false, false];
+      for (let i = 0; i < 4; i++) {
+        next[i] = Boolean(prev[i]);
       }
-    }
-    const score = ((len - distance) / len) * 100;
-    return parseFloat(score.toFixed(1));
+      next[index] = value;
+      return next;
+    });
   };
 
   const startCamera = async () => {
@@ -309,75 +308,7 @@ export default function StudentPortal() {
           const result = await response.json();
           if (result.secure_url) {
             setRegIDUrl(result.secure_url);
-
-            try {
-              // Try calling OCR.space free API to extract text from the actual uploaded ID card URL
-              const ocrRes = await fetch(
-                `https://api.ocr.space/parse/image?apikey=helloworld&url=${encodeURIComponent(result.secure_url)}`,
-              );
-              const ocrData = await ocrRes.json();
-              if (ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
-                const parsedText = ocrData.ParsedResults[0].ParsedText;
-                const lines = parsedText
-                  .split("\n")
-                  .map((l: string) => l.trim())
-                  .filter(Boolean);
-
-                let bestNameLine = "No Match Found";
-                let maxNameSim = 0;
-                let bestRollLine = "No Match Found";
-                let maxRollSim = 0;
-
-                for (const line of lines) {
-                  const simName = calculateSimilarityScore(
-                    regName.toLowerCase(),
-                    line.toLowerCase(),
-                  );
-                  if (simName > maxNameSim) {
-                    maxNameSim = simName;
-                    bestNameLine = line;
-                  }
-                  const simRoll = calculateSimilarityScore(
-                    regRoll.toLowerCase(),
-                    line.toLowerCase(),
-                  );
-                  if (simRoll > maxRollSim) {
-                    maxRollSim = simRoll;
-                    bestRollLine = line;
-                  }
-                }
-
-                const extractedName =
-                  maxNameSim > 30 ? bestNameLine : "No Match Found";
-                const extractedRoll =
-                  maxRollSim > 30 ? bestRollLine : "No Match Found";
-
-                setOcrResult({
-                  extracted_name: extractedName,
-                  extracted_roll: extractedRoll,
-                  similarity_score: maxNameSim,
-                  confidence:
-                    maxNameSim >= 85
-                      ? "high"
-                      : maxNameSim >= 60
-                        ? "medium"
-                        : "low",
-                });
-              } else {
-                throw new Error("Empty text returned");
-              }
-            } catch (ocrErr) {
-              console.warn("Frontend OCR.space API fallback:", ocrErr);
-              // Fallback to simulated OCR scan
-              const ocrName = simulateOcrText(regName);
-              const ocrRoll = simulateOcrText(regRoll);
-              setOcrResult({
-                extracted_name: ocrName,
-                extracted_roll: ocrRoll,
-                similarity_score: calculateSimilarityScore(regName, ocrName),
-                confidence: "high",
-              });
-            }
+            await runServerOcrPreview(result.secure_url);
           } else {
             throw new Error(result.error?.message || "Upload failed");
           }
@@ -443,77 +374,25 @@ export default function StudentPortal() {
     }
   };
 
-  // Simulate OCR extraction when fields filled
+  // Re-run server OCR when name/roll change after ID upload
   const triggerOcrSimulate = async () => {
     if (!regName || !regRoll || !regIDUrl) return;
-    setOcrLoading(true);
-    try {
-      const ocrRes = await fetch(
-        `https://api.ocr.space/parse/image?apikey=helloworld&url=${encodeURIComponent(regIDUrl)}`,
-      );
-      const ocrData = await ocrRes.json();
-      if (ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
-        const parsedText = ocrData.ParsedResults[0].ParsedText;
-        const lines = parsedText
-          .split("\n")
-          .map((l: string) => l.trim())
-          .filter(Boolean);
-
-        let bestNameLine = "No Match Found";
-        let maxNameSim = 0;
-        let bestRollLine = "No Match Found";
-        let maxRollSim = 0;
-
-        for (const line of lines) {
-          const simName = calculateSimilarityScore(
-            regName.toLowerCase(),
-            line.toLowerCase(),
-          );
-          if (simName > maxNameSim) {
-            maxNameSim = simName;
-            bestNameLine = line;
-          }
-          const simRoll = calculateSimilarityScore(
-            regRoll.toLowerCase(),
-            line.toLowerCase(),
-          );
-          if (simRoll > maxRollSim) {
-            maxRollSim = simRoll;
-            bestRollLine = line;
-          }
-        }
-
-        const extractedName = maxNameSim > 30 ? bestNameLine : "No Match Found";
-        const extractedRoll = maxRollSim > 30 ? bestRollLine : "No Match Found";
-
-        setOcrResult({
-          extracted_name: extractedName,
-          extracted_roll: extractedRoll,
-          similarity_score: maxNameSim,
-          confidence:
-            maxNameSim >= 85 ? "high" : maxNameSim >= 60 ? "medium" : "low",
-        });
-      } else {
-        throw new Error("Empty text returned");
-      }
-    } catch (ocrErr) {
-      console.warn("triggerOcrSimulate fallback:", ocrErr);
-      const ocrName = simulateOcrText(regName);
-      const ocrRoll = simulateOcrText(regRoll);
-      setOcrResult({
-        extracted_name: ocrName,
-        extracted_roll: ocrRoll,
-        similarity_score: calculateSimilarityScore(regName, ocrName),
-        confidence: "high",
-      });
-    } finally {
-      setOcrLoading(false);
-    }
+    await runServerOcrPreview(regIDUrl);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName || !regRoll || !mobileNumber) return;
+    if (!regIDUrl) {
+      alert("Please scan your college ID card before registering.");
+      return;
+    }
+    if (!ocrResult || ocrResult.similarity_score < 60) {
+      alert(
+        "ID card scan did not match well enough. Please retake a clear photo of your ID.",
+      );
+      return;
+    }
     try {
       setIsLoginLoading(true);
       const data = await studentApi.register({
@@ -586,8 +465,42 @@ export default function StudentPortal() {
       return;
     }
 
+    const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    if (!razorpayKey) {
+      alert("Payment is not configured. NEXT_PUBLIC_RAZORPAY_KEY_ID is missing.");
+      return;
+    }
+
+    const enterTracking = () => {
+      setActiveOrderID(paymentData.order_id);
+      setActivePayment(null);
+      setCart({});
+    };
+
+    const pollUntilPaid = async (timeoutMs = 60000) => {
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        try {
+          const status = await studentApi.getPaymentStatus(paymentData.order_id);
+          if (status.payment_status === "paid") {
+            return true;
+          }
+          if (
+            status.payment_status === "failed" ||
+            status.order_status === "cancelled"
+          ) {
+            return false;
+          }
+        } catch {
+          // keep polling
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      return false;
+    };
+
     const options = {
-      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_TEZ0gPAaYChb6o",
+      key: razorpayKey,
       amount: Math.round(paymentData.total_amount * 100),
       currency: "INR",
       name: "CampusBites",
@@ -614,17 +527,33 @@ export default function StudentPortal() {
       handler: async function (response: any) {
         try {
           setPaymentLoading(true);
-          await studentApi.verifyPayment({
-            order_id: paymentData.order_id,
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-          });
+          let verified = false;
+          for (let attempt = 0; attempt < 3 && !verified; attempt++) {
+            try {
+              await studentApi.verifyPayment({
+                order_id: paymentData.order_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              verified = true;
+            } catch (e) {
+              if (attempt === 2) {
+                const paidViaWebhook = await pollUntilPaid(45000);
+                if (paidViaWebhook) {
+                  verified = true;
+                } else {
+                  throw e;
+                }
+              } else {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              }
+            }
+          }
 
-          // Start tracking
-          setActiveOrderID(paymentData.order_id);
-          setActivePayment(null);
-          setCart({});
+          if (verified) {
+            enterTracking();
+          }
         } catch (e: any) {
           alert("Payment verification failed: " + e.message);
         } finally {
@@ -639,8 +568,18 @@ export default function StudentPortal() {
         color: "#f97316",
       },
       modal: {
-        ondismiss: function () {
-          console.log("Payment modal closed by user.");
+        ondismiss: async function () {
+          // If payment completed but handler was lost (common after UPI return), recover via poll
+          setPaymentLoading(true);
+          try {
+            const paid = await pollUntilPaid(15000);
+            if (paid) {
+              enterTracking();
+              return;
+            }
+          } finally {
+            setPaymentLoading(false);
+          }
         },
       },
     };
@@ -650,6 +589,23 @@ export default function StudentPortal() {
       alert("Payment failed: " + response.error.description);
     });
     rzp.open();
+  };
+
+  const cancelActivePayment = async () => {
+    if (!activePayment?.order_id) {
+      setActivePayment(null);
+      return;
+    }
+    try {
+      setPaymentLoading(true);
+      await studentApi.cancelUnpaidOrder(activePayment.order_id);
+    } catch (e: any) {
+      // If already paid/cancelled, still clear overlay when appropriate
+      console.error("Cancel unpaid order failed:", e);
+    } finally {
+      setPaymentLoading(false);
+      setActivePayment(null);
+    }
   };
 
   // Order Placement
@@ -668,17 +624,21 @@ export default function StudentPortal() {
   };
 
   const handleNotificationConsent = async (checked: boolean) => {
-    setConsentChecks([consentChecks[0], consentChecks[1], consentChecks[2], checked]);
-    if (checked) {
-      try {
-        const token = await requestForToken();
-        if (token) {
-          // Send to backend
-          await studentApi.saveFCMToken(token);
+    updateConsentCheck(3, checked);
+    if (!checked) return;
+    try {
+      const token = await requestForToken();
+      if (token) {
+        await studentApi.saveFCMToken(token);
+      } else if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "denied") {
+          alert(
+            "Notifications are blocked in your browser. You can still order; enable notifications in site settings for live updates.",
+          );
         }
-      } catch (e) {
-        console.error("Failed to setup notifications", e);
       }
+    } catch (e) {
+      console.warn("Failed to setup notifications", e);
     }
   };
 
@@ -688,7 +648,6 @@ export default function StudentPortal() {
       !consentChecks[0] ||
       !consentChecks[1] ||
       !consentChecks[2] ||
-      !consentChecks[3] ||
       consentInput.toLowerCase() !== "ok dev"
     ) {
       return;
@@ -1050,7 +1009,7 @@ export default function StudentPortal() {
                     </button>
                     <button
                       type="submit"
-                      disabled={isLoginLoading || !ocrResult}
+                      disabled={isLoginLoading || !ocrResult || ocrResult.similarity_score < 60 || !regIDUrl}
                       className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl flex items-center justify-center space-x-2 text-sm disabled:opacity-40"
                     >
                       {isLoginLoading ? (
@@ -1409,7 +1368,7 @@ export default function StudentPortal() {
                   )}
                 </button>
                 <button
-                  onClick={() => setActivePayment(null)}
+                  onClick={() => cancelActivePayment()}
                   disabled={paymentLoading}
                   className="w-full bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 py-3 rounded-xl font-semibold text-sm transition"
                 >
@@ -1806,8 +1765,8 @@ export default function StudentPortal() {
                 <label className="flex items-start space-x-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={consentChecks[0]}
-                    onChange={(e) => setConsentChecks([e.target.checked, consentChecks[1], consentChecks[2]])}
+                    checked={Boolean(consentChecks[0])}
+                    onChange={(e) => updateConsentCheck(0, e.target.checked)}
                     className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
@@ -1818,8 +1777,8 @@ export default function StudentPortal() {
                 <label className="flex items-start space-x-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={consentChecks[1]}
-                    onChange={(e) => setConsentChecks([consentChecks[0], e.target.checked, consentChecks[2]])}
+                    checked={Boolean(consentChecks[1])}
+                    onChange={(e) => updateConsentCheck(1, e.target.checked)}
                     className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
@@ -1830,8 +1789,8 @@ export default function StudentPortal() {
                 <label className="flex items-start space-x-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={consentChecks[2]}
-                    onChange={(e) => setConsentChecks([consentChecks[0], consentChecks[1], e.target.checked])}
+                    checked={Boolean(consentChecks[2])}
+                    onChange={(e) => updateConsentCheck(2, e.target.checked)}
                     className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
@@ -1842,7 +1801,7 @@ export default function StudentPortal() {
                 <label className="flex items-start space-x-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={consentChecks[3]}
+                    checked={Boolean(consentChecks[3])}
                     onChange={(e) => handleNotificationConsent(e.target.checked)}
                     className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
                   />

@@ -80,6 +80,21 @@ export const studentApi = {
       body: JSON.stringify(data),
     }),
 
+  previewOcr: (data: {
+    short_name: string;
+    roll_number: string;
+    id_card_url: string;
+  }) =>
+    apiRequest<{
+      extracted_name: string;
+      extracted_roll: string;
+      similarity_score: number;
+      confidence: string;
+    }>("/ocr/preview", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   // Get categorized menu
   getMenu: () =>
     apiRequest<{ categories: Category[]; products: Product[] }>("/menu"),
@@ -114,6 +129,16 @@ export const studentApi = {
     apiRequest<{ message: string }>("/payments/verify", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  getPaymentStatus: (id: string) =>
+    apiRequest<{ payment_status: string; order_status: string }>(
+      `/orders/${id}/payment-status`,
+    ),
+
+  cancelUnpaidOrder: (id: string) =>
+    apiRequest<{ message: string }>(`/orders/${id}/cancel-unpaid`, {
+      method: "POST",
     }),
 
   // Track active order

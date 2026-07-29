@@ -1,12 +1,15 @@
 package services
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
+	"mime/multipart"
 	"net/http"
-	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,40 +31,206 @@ func NewOCRService(provider, apiKey string) *OCRService {
 type OCRSpaceResponse struct {
 	ParsedResults []struct {
 		ParsedText string `json:"ParsedText"`
+		ErrorMessage string `json:"ErrorMessage"`
 	} `json:"ParsedResults"`
-	IsErroredOnProcessing bool   `json:"IsErroredOnProcessing"`
-	ErrorMessage          string `json:"ErrorMessage"`
+	IsErroredOnProcessing bool        `json:"IsErroredOnProcessing"`
+	ErrorMessage          interface{} `json:"ErrorMessage"`
+	OCRExitCode           int         `json:"OCRExitCode"`
+}
+
+func (s *OCRService) resolveAPIKey() string {
+	key := strings.TrimSpace(s.apiKey)
+	if key == "" || key == "mock-ocr-key-12345" {
+		return "helloworld"
+	}
+	return key
 }
 
 func (s *OCRService) extractTextFromURL(idCardURL string) (string, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	apiURL := fmt.Sprintf("https://api.ocr.space/parse/image?apikey=helloworld&url=%s", url.QueryEscape(idCardURL))
+	if !strings.HasPrefix(idCardURL, "http://") && !strings.HasPrefix(idCardURL, "https://") {
+		return "", fmt.Errorf("id card url must be an http(s) image url")
+	}
 
-	resp, err := client.Get(apiURL)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("apikey", s.resolveAPIKey())
+	_ = writer.WriteField("url", idCardURL)
+	_ = writer.WriteField("language", "eng")
+	_ = writer.WriteField("isOverlayRequired", "false")
+	_ = writer.WriteField("OCREngine", "2")
+	_ = writer.WriteField("scale", "true")
+	_ = writer.WriteField("detectOrientation", "true")
+	_ = writer.Close()
+
+	req, err := http.NewRequest("POST", "https://api.ocr.space/parse/image", &body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("ocr.space returned status code %d", resp.StatusCode)
-	}
-
-	var ocrResp OCRSpaceResponse
-	err = json.NewDecoder(resp.Body).Decode(&ocrResp)
+	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ocr.space returned status code %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	var ocrResp OCRSpaceResponse
+	if err := json.Unmarshal(respBytes, &ocrResp); err != nil {
+		return "", err
+	}
+
 	if ocrResp.IsErroredOnProcessing {
-		return "", fmt.Errorf("ocr error: %s", ocrResp.ErrorMessage)
+		return "", fmt.Errorf("ocr error: %v", ocrResp.ErrorMessage)
 	}
 
 	if len(ocrResp.ParsedResults) == 0 {
-		return "", fmt.Errorf("no text extracted")
+		return "", fmt.Errorf("no text extracted from ID card")
 	}
 
-	return ocrResp.ParsedResults[0].ParsedText, nil
+	text := strings.TrimSpace(ocrResp.ParsedResults[0].ParsedText)
+	if text == "" {
+		return "", fmt.Errorf("empty text extracted from ID card")
+	}
+
+	return text, nil
+}
+
+var (
+	nameLabelRe = regexp.MustCompile(`(?i)^\s*(?:student\s*)?name\s*[:\-]\s*(.+)$`)
+	rollLabelRe = regexp.MustCompile(`(?i)^\s*(?:roll|reg(?:istration)?|enrollment|enrolment|id)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Za-z0-9\-\/]+)\s*$`)
+	rollTokenRe = regexp.MustCompile(`(?i)\b[A-Z]{0,6}\d{2,}[A-Z0-9\-\/]*\b`)
+)
+
+func normalizeOCRText(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.Join(strings.Fields(s), " ")
+	return s
+}
+
+func stripOCRLabels(line string) string {
+	line = strings.TrimSpace(line)
+	if m := nameLabelRe.FindStringSubmatch(line); len(m) == 2 {
+		return strings.TrimSpace(m[1])
+	}
+	if m := rollLabelRe.FindStringSubmatch(line); len(m) == 2 {
+		return strings.TrimSpace(m[1])
+	}
+	return line
+}
+
+// matchScore returns similarity 0..1 with containment boosts for ID-card lines.
+func (s *OCRService) matchScore(expected, candidate string) float64 {
+	e := normalizeOCRText(expected)
+	c := normalizeOCRText(stripOCRLabels(candidate))
+	if e == "" || c == "" {
+		return 0
+	}
+	if e == c {
+		return 1
+	}
+	if strings.Contains(c, e) || strings.Contains(e, c) {
+		shorter := math.Min(float64(len(e)), float64(len(c)))
+		longer := math.Max(float64(len(e)), float64(len(c)))
+		return math.Max(0.9, shorter/longer)
+	}
+	return s.CalculateSimilarity(e, c)
+}
+
+func (s *OCRService) extractNameAndRoll(parsedText, shortName, rollNumber string) (extractedName, extractedRoll string, nameSimilarity float64) {
+	rawLines := strings.Split(parsedText, "\n")
+	var lines []string
+	for _, line := range rawLines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	fullText := strings.Join(lines, "\n")
+	normFull := normalizeOCRText(fullText)
+	normName := normalizeOCRText(shortName)
+	normRoll := normalizeOCRText(rollNumber)
+
+	bestNameLine := "No Match Found"
+	maxNameSim := 0.0
+	bestRollLine := "No Match Found"
+	maxRollSim := 0.0
+
+	// Prefer labeled fields
+	for _, line := range lines {
+		if m := nameLabelRe.FindStringSubmatch(line); len(m) == 2 {
+			sim := s.matchScore(shortName, m[1])
+			if sim > maxNameSim {
+				maxNameSim = sim
+				bestNameLine = strings.TrimSpace(m[1])
+			}
+		}
+		if m := rollLabelRe.FindStringSubmatch(line); len(m) == 2 {
+			sim := s.matchScore(rollNumber, m[1])
+			if sim > maxRollSim {
+				maxRollSim = sim
+				bestRollLine = strings.TrimSpace(m[1])
+			}
+		}
+	}
+
+	for _, line := range lines {
+		simName := s.matchScore(shortName, line)
+		if simName > maxNameSim {
+			maxNameSim = simName
+			bestNameLine = stripOCRLabels(line)
+		}
+		simRoll := s.matchScore(rollNumber, line)
+		if simRoll > maxRollSim {
+			maxRollSim = simRoll
+			bestRollLine = stripOCRLabels(line)
+		}
+	}
+
+	// Exact roll token search across full text
+	if normRoll != "" && strings.Contains(normFull, normRoll) {
+		maxRollSim = 1
+		bestRollLine = rollNumber
+	} else {
+		for _, tok := range rollTokenRe.FindAllString(fullText, -1) {
+			sim := s.matchScore(rollNumber, tok)
+			if sim > maxRollSim {
+				maxRollSim = sim
+				bestRollLine = tok
+			}
+		}
+	}
+
+	if normName != "" && strings.Contains(normFull, normName) && maxNameSim < 0.95 {
+		maxNameSim = 0.95
+		bestNameLine = shortName
+	}
+
+	if maxNameSim > 0.3 {
+		extractedName = bestNameLine
+		nameSimilarity = maxNameSim
+	} else {
+		extractedName = "No Match Found"
+		nameSimilarity = maxNameSim
+	}
+
+	if maxRollSim > 0.3 {
+		extractedRoll = bestRollLine
+	} else {
+		extractedRoll = "No Match Found"
+	}
+
+	return extractedName, extractedRoll, nameSimilarity
 }
 
 // ProcessVerification runs OCR and calculates name matching scores.
@@ -69,54 +238,22 @@ func (s *OCRService) ProcessVerification(shortName, rollNumber, idCardURL string
 	var extractedName, extractedRoll string
 	var nameSimilarity float64
 
-	// Try real OCR via OCR.space API first
-	parsedText, err := s.extractTextFromURL(idCardURL)
-	if err == nil && parsedText != "" {
-		lines := strings.Split(parsedText, "\n")
-		var bestNameLine string
-		var maxNameSim float64 = 0.0
+	useMock := strings.EqualFold(strings.TrimSpace(s.provider), "mock") &&
+		!strings.HasPrefix(idCardURL, "http://") &&
+		!strings.HasPrefix(idCardURL, "https://")
 
-		var bestRollLine string
-		var maxRollSim float64 = 0.0
-
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if len(line) == 0 {
-				continue
-			}
-
-			simName := s.CalculateSimilarity(strings.ToLower(shortName), strings.ToLower(line))
-			if simName > maxNameSim {
-				maxNameSim = simName
-				bestNameLine = line
-			}
-
-			simRoll := s.CalculateSimilarity(strings.ToLower(rollNumber), strings.ToLower(line))
-			if simRoll > maxRollSim {
-				maxRollSim = simRoll
-				bestRollLine = line
-			}
-		}
-
-		if maxNameSim > 0.3 {
-			extractedName = bestNameLine
-			nameSimilarity = maxNameSim
-		} else {
-			extractedName = "No Match Found"
-			nameSimilarity = maxNameSim
-		}
-
-		if maxRollSim > 0.3 {
-			extractedRoll = bestRollLine
-		} else {
-			extractedRoll = "No Match Found"
-		}
-	} else {
-		// Fallback to simulated mock OCR
-		log.Printf("OCR.space API error or empty text (falling back to mock): %v\n", err)
+	if useMock {
 		extractedName = simulateOcrText(shortName)
 		extractedRoll = simulateOcrText(rollNumber)
 		nameSimilarity = s.CalculateSimilarity(strings.ToLower(shortName), strings.ToLower(extractedName))
+	} else {
+		parsedText, err := s.extractTextFromURL(idCardURL)
+		if err != nil {
+			log.Printf("OCR extraction failed: %v\n", err)
+			return nil, fmt.Errorf("could not read ID card text — please retake a clear photo of your ID: %w", err)
+		}
+		extractedName, extractedRoll, nameSimilarity = s.extractNameAndRoll(parsedText, shortName, rollNumber)
+		log.Printf("OCR extracted name=%q roll=%q score=%.2f\n", extractedName, extractedRoll, nameSimilarity*100)
 	}
 
 	confidence := models.ConfidenceLevelLow
@@ -155,11 +292,10 @@ func simulateOcrText(s string) string {
 			replaced = true
 		}
 		if replaced {
-			break // Replace only one character for realistic high match
+			break
 		}
 	}
 	if !replaced && len(runes) > 2 {
-		// Swap last two characters
 		runes[len(runes)-1], runes[len(runes)-2] = runes[len(runes)-2], runes[len(runes)-1]
 	}
 	return string(runes)

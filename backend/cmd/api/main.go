@@ -12,6 +12,7 @@ import (
 	"campusbites/backend/internal/config"
 	"campusbites/backend/internal/database"
 	"campusbites/backend/internal/handlers"
+	customMiddleware "campusbites/backend/internal/middleware"
 	"campusbites/backend/internal/server"
 	"campusbites/backend/internal/services"
 )
@@ -68,6 +69,8 @@ func main() {
 	orderQueue.StartWorkers(20)
 
 	hCtx := handlers.NewHandlerContext(db, rdb, authService, ocrService, paymentService, auditService, fcmService, orderQueue)
+
+	customMiddleware.SetAllowedOrigins(cfg.AllowedOrigins)
 
 	// 4. Bootstrap database tables and run seeding if database is connected
 	if db != nil {
@@ -128,22 +131,6 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 				log.Printf("Failed to seed default admin: %v\n", err)
 			} else {
 				log.Println("Seeded Default Admin User: admin@campusbites.com / Admin&Ayaz786")
-			}
-		}
-	} else if err == nil && adminCount > 0 {
-		// Update password hash for default admin to ensure password change
-		hash, err := authService.HashPassword("Admin&Ayaz786")
-		if err == nil {
-			_, err = db.Pool.Exec(ctx, `
-				UPDATE admin_users 
-				SET password_hash = $1 
-				WHERE email = 'admin@campusbites.com'`,
-				hash,
-			)
-			if err != nil {
-				log.Printf("Failed to update default admin password: %v\n", err)
-			} else {
-				log.Println("Updated Default Admin User password to: Admin&Ayaz786")
 			}
 		}
 	}

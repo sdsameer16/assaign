@@ -356,11 +356,23 @@ func (h *HandlerContext) AssignDeliveryPartner(w http.ResponseWriter, r *http.Re
 	}
 	defer tx.Rollback(ctx)
 
-	// Check order is paid or received before assigning
-	var currentStatus string
-	err = tx.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, orderID).Scan(&currentStatus)
+	var currentStatus, paymentStatus string
+	err = tx.QueryRow(ctx, `
+		SELECT o.status, p.status
+		FROM orders o
+		JOIN payments p ON p.order_id = o.id
+		WHERE o.id = $1
+	`, orderID).Scan(&currentStatus, &paymentStatus)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "order not found")
+		return
+	}
+	if paymentStatus != models.PaymentStatusPaid {
+		RespondError(w, http.StatusBadRequest, "cannot assign unpaid order")
+		return
+	}
+	if currentStatus != models.OrderStatusReceived && currentStatus != models.OrderStatusPreparing && currentStatus != models.OrderStatusPacked {
+		RespondError(w, http.StatusBadRequest, "order cannot be assigned in status: "+currentStatus)
 		return
 	}
 
@@ -533,11 +545,45 @@ func (h *HandlerContext) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "Product updated successfully"})
 }
 
-// CancelOrder handles marking an order as out of stock and triggering refunds.
+// CancelOrder handles marking an order as cancelled and refunding paid payments via Razorpay.
 func (h *HandlerContext) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	orderID := getRouteParam(r, "id")
 	adminID := r.Context().Value("user_id").(string)
 	ctx := r.Context()
+
+	var orderStatus, paymentStatus string
+	var razorpayPaymentID sql.NullString
+	err := h.DB.Pool.QueryRow(ctx, `
+		SELECT o.status, p.status, p.razorpay_payment_id
+		FROM orders o
+		JOIN payments p ON p.order_id = o.id
+		WHERE o.id = $1
+	`, orderID).Scan(&orderStatus, &paymentStatus, &razorpayPaymentID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "order not found")
+		return
+	}
+	if orderStatus == models.OrderStatusCancelled {
+		RespondJSON(w, http.StatusOK, map[string]string{"message": "order already cancelled"})
+		return
+	}
+	if orderStatus == models.OrderStatusDelivered {
+		RespondError(w, http.StatusBadRequest, "cannot cancel a delivered order")
+		return
+	}
+
+	refunded := false
+	if paymentStatus == models.PaymentStatusPaid {
+		if !razorpayPaymentID.Valid || razorpayPaymentID.String == "" {
+			RespondError(w, http.StatusBadRequest, "paid order has no razorpay payment id; cannot refund")
+			return
+		}
+		if err := h.PaymentService.CreateRefund(razorpayPaymentID.String); err != nil {
+			RespondError(w, http.StatusBadGateway, "razorpay refund failed: "+err.Error())
+			return
+		}
+		refunded = true
+	}
 
 	tx, err := h.DB.Pool.Begin(ctx)
 	if err != nil {
@@ -546,22 +592,23 @@ func (h *HandlerContext) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 
-	// Update order status to 'cancelled'
-	_, err = tx.Exec(ctx, `UPDATE orders SET status = 'cancelled' WHERE id = $1`, orderID)
+	_, err = tx.Exec(ctx, `UPDATE orders SET status = $1 WHERE id = $2 AND status <> $1`, models.OrderStatusCancelled, orderID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to update order status")
 		return
 	}
 
-	// Update payment status to 'refunded'
-	_, err = tx.Exec(ctx, `UPDATE payments SET status = 'refunded' WHERE order_id = $1`, orderID)
+	if refunded {
+		_, err = tx.Exec(ctx, `UPDATE payments SET status = $1 WHERE order_id = $2`, models.PaymentStatusRefunded, orderID)
+	} else if paymentStatus == models.PaymentStatusCreated {
+		_, err = tx.Exec(ctx, `UPDATE payments SET status = $1 WHERE order_id = $2`, models.PaymentStatusFailed, orderID)
+	}
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to update payment status")
 		return
 	}
 
-	// Log order status history transition
-	_, err = tx.Exec(ctx, `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'cancelled', $2)`, orderID, adminID)
+	_, err = tx.Exec(ctx, `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, $2, $3)`, orderID, models.OrderStatusCancelled, adminID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to save history log")
 		return
@@ -573,9 +620,13 @@ func (h *HandlerContext) CancelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Cancelled order "+orderID+" (Out of Stock / Refunded)", r)
+	msg := "order cancelled successfully"
+	if refunded {
+		msg = "order cancelled and refunded successfully"
+	}
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Cancelled order "+orderID, r)
 
-	RespondJSON(w, http.StatusOK, map[string]string{"message": "order cancelled and marked as refunded successfully"})
+	RespondJSON(w, http.StatusOK, map[string]string{"message": msg})
 }
 
 // DeliverOrder handles manual order completion / counter handover.
@@ -583,6 +634,26 @@ func (h *HandlerContext) DeliverOrder(w http.ResponseWriter, r *http.Request) {
 	orderID := getRouteParam(r, "id")
 	adminID := r.Context().Value("user_id").(string)
 	ctx := r.Context()
+
+	var orderStatus, paymentStatus string
+	err := h.DB.Pool.QueryRow(ctx, `
+		SELECT o.status, p.status
+		FROM orders o
+		JOIN payments p ON p.order_id = o.id
+		WHERE o.id = $1
+	`, orderID).Scan(&orderStatus, &paymentStatus)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "order not found")
+		return
+	}
+	if paymentStatus != models.PaymentStatusPaid {
+		RespondError(w, http.StatusBadRequest, "cannot deliver unpaid order")
+		return
+	}
+	if orderStatus == models.OrderStatusDelivered || orderStatus == models.OrderStatusCancelled {
+		RespondError(w, http.StatusBadRequest, "order cannot be delivered in status: "+orderStatus)
+		return
+	}
 
 	tx, err := h.DB.Pool.Begin(ctx)
 	if err != nil {

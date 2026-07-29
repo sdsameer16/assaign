@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -24,6 +25,7 @@ type Config struct {
 	RazorpayKeyID         string
 	RazorpayKeySecret     string
 	RazorpayWebhookSecret string
+	AllowedOrigins        []string
 }
 
 func LoadConfig() *Config {
@@ -41,12 +43,41 @@ func LoadConfig() *Config {
 	redisUseTLSStr := getEnv("REDIS_USE_TLS", "false")
 	redisUseTLS := redisUseTLSStr == "true"
 
-	jwtSecret := getEnv("JWT_SECRET", "campusbites_jwt_super_secure_secret_key_2026")
+	isProd := strings.EqualFold(env, "production")
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		if isProd {
+			log.Fatal("JWT_SECRET must be set in production")
+		}
+		jwtSecret = "campusbites_jwt_super_secure_secret_key_2026"
+		log.Println("WARNING: using default JWT_SECRET; set JWT_SECRET for non-local use")
+	}
+
 	ocrProvider := getEnv("OCR_PROVIDER", "mock")
 	ocrApiKey := getEnv("OCR_API_KEY", "mock-ocr-key-12345")
-	rzpKeyID := getEnv("RAZORPAY_KEY_ID", "rzp_test_keyid_12345")
-	rzpSecret := getEnv("RAZORPAY_KEY_SECRET", "rzp_test_secret_12345")
-	rzpWebhookSecret := getEnv("RAZORPAY_WEBHOOK_SECRET", "rzp_webhook_secret_12345")
+
+	rzpKeyID := os.Getenv("RAZORPAY_KEY_ID")
+	rzpSecret := os.Getenv("RAZORPAY_KEY_SECRET")
+	rzpWebhookSecret := os.Getenv("RAZORPAY_WEBHOOK_SECRET")
+	if isProd {
+		if rzpKeyID == "" || rzpSecret == "" || rzpWebhookSecret == "" {
+			log.Fatal("RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET must be set in production")
+		}
+	} else {
+		if rzpKeyID == "" {
+			rzpKeyID = "rzp_test_keyid_12345"
+			log.Println("WARNING: using default RAZORPAY_KEY_ID")
+		}
+		if rzpSecret == "" {
+			rzpSecret = "rzp_test_secret_12345"
+			log.Println("WARNING: using default RAZORPAY_KEY_SECRET")
+		}
+		if rzpWebhookSecret == "" {
+			rzpWebhookSecret = "rzp_webhook_secret_12345"
+			log.Println("WARNING: using default RAZORPAY_WEBHOOK_SECRET")
+		}
+	}
 
 	jwtExpiryStr := getEnv("JWT_EXPIRY_HOURS", "24")
 	jwtExpiry, err := strconv.Atoi(jwtExpiryStr)
@@ -56,6 +87,18 @@ func LoadConfig() *Config {
 
 	if dbURL == "" {
 		log.Println("WARNING: DATABASE_URL is not set. Database connections will fail unless set.")
+	}
+
+	allowedOrigins := parseOrigins(os.Getenv("ALLOWED_ORIGINS"))
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{
+			"http://localhost:3000",
+			"http://localhost:3001",
+			"http://localhost:3002",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:3001",
+			"http://127.0.0.1:3002",
+		}
 	}
 
 	return &Config{
@@ -74,6 +117,7 @@ func LoadConfig() *Config {
 		RazorpayKeyID:         rzpKeyID,
 		RazorpayKeySecret:     rzpSecret,
 		RazorpayWebhookSecret: rzpWebhookSecret,
+		AllowedOrigins:        allowedOrigins,
 	}
 }
 
@@ -82,4 +126,19 @@ func getEnv(key, defaultVal string) string {
 		return value
 	}
 	return defaultVal
+}
+
+func parseOrigins(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	var out []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

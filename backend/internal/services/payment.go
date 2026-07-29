@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -130,10 +129,6 @@ func (ps *PaymentService) VerifyWebhookSignature(payload []byte, receivedSignatu
 // VerifyPaymentSignature verifies checkout payment signatures.
 // Formula: HMAC-SHA256(order_id + "|" + payment_id, key_secret)
 func (ps *PaymentService) VerifyPaymentSignature(orderID, paymentID, signature string) error {
-	if strings.HasPrefix(signature, "sig_mock_") {
-		return nil
-	}
-
 	if ps.keySecret == "" {
 		return errors.New("key secret is empty")
 	}
@@ -145,6 +140,42 @@ func (ps *PaymentService) VerifyPaymentSignature(orderID, paymentID, signature s
 
 	if subtle.ConstantTimeCompare([]byte(expectedSignature), []byte(signature)) != 1 {
 		return errors.New("invalid payment signature: signature mismatch")
+	}
+
+	return nil
+}
+
+// CreateRefund issues a full refund for a captured Razorpay payment.
+func (ps *PaymentService) CreateRefund(paymentID string) error {
+	if paymentID == "" {
+		return errors.New("payment id is empty")
+	}
+	if ps.keyID == "" || ps.keySecret == "" {
+		return errors.New("razorpay credentials are not set")
+	}
+
+	url := fmt.Sprintf("https://api.razorpay.com/v1/payments/%s/refund", paymentID)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return fmt.Errorf("failed to create refund request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(ps.keyID, ps.keySecret)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("refund http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read refund response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("razorpay refund failed status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil

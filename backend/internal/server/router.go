@@ -21,10 +21,14 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 	// API Namespace Group
 	r.Route("/api", func(r chi.Router) {
 
+		// Razorpay webhooks (public; signature-verified)
+		r.Post("/payments/webhook", hCtx.RazorpayWebhook)
+
 		// 1. Student Portal API Group
 		r.Route("/student", func(r chi.Router) {
 			r.Post("/register", hCtx.StudentRegister)
 			r.Post("/login", hCtx.StudentLogin)
+			r.Post("/ocr/preview", hCtx.StudentOCRPreview)
 			r.Get("/menu", hCtx.GetMenu)
 			r.Get("/cutoff", hCtx.GetCutoffTime)
 
@@ -34,8 +38,10 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Use(customMiddleware.RequireRole("student"))
 
 				r.Post("/orders", hCtx.StudentCreateOrder)
-				r.Get("/orders/{id}/track", hCtx.TrackOrder)
 				r.Get("/orders/history", hCtx.StudentGetHistory)
+				r.Get("/orders/{id}/track", hCtx.TrackOrder)
+				r.Get("/orders/{id}/payment-status", hCtx.GetPaymentStatus)
+				r.Post("/orders/{id}/cancel-unpaid", hCtx.CancelUnpaidOrder)
 				r.Post("/payments/verify", hCtx.StudentVerifyPayment)
 				r.Post("/fcm-token", hCtx.SaveStudentFCMToken)
 			})
