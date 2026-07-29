@@ -89,6 +89,9 @@ func main() {
 			}
 		}
 
+		// Run lightweight migrations for new columns
+		runMigrations(db)
+
 		// Seed initial datasets if empty
 		seedDatabase(db, authService)
 	}
@@ -110,6 +113,21 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server listen failed: %v", err)
 	}
+}
+
+// runMigrations applies additive schema changes that CREATE TABLE IF NOT EXISTS cannot handle.
+func runMigrations(db *database.DB) {
+	ctx := context.Background()
+	migrations := []string{
+		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted BOOLEAN DEFAULT FALSE",
+		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMP WITH TIME ZONE",
+	}
+	for _, m := range migrations {
+		if _, err := db.Pool.Exec(ctx, m); err != nil {
+			log.Printf("Migration warning: %v\n", err)
+		}
+	}
+	log.Println("Migrations applied successfully.")
 }
 
 // seedDatabase seeds the database with categories, products, and a default admin user.
