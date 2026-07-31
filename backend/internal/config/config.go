@@ -79,10 +79,10 @@ func LoadConfig() *Config {
 		}
 	}
 
-	jwtExpiryStr := getEnv("JWT_EXPIRY_HOURS", "24")
+	jwtExpiryStr := getEnv("JWT_EXPIRY_HOURS", "168")
 	jwtExpiry, err := strconv.Atoi(jwtExpiryStr)
 	if err != nil {
-		jwtExpiry = 24
+		jwtExpiry = 168
 	}
 
 	if dbURL == "" {

@@ -58,7 +58,6 @@ export default function StudentPortal() {
 
   // Cart state
   const [cart, setCart] = useState<{ [product_id: string]: number }>({});
-  const [showCart, setShowCart] = useState(false);
 
   // Checkout Form states
   const [roomNumber, setRoomNumber] = useState("");
@@ -92,6 +91,7 @@ export default function StudentPortal() {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const orderPanelRef = React.useRef<HTMLDivElement | null>(null);
 
   // Load session & configuration on start
   useEffect(() => {
@@ -489,6 +489,18 @@ export default function StudentPortal() {
     return Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   };
 
+  const scrollToOrderPanel = () => {
+    if (activeOrderID && !showMenuExplorer) {
+      setShowMenuExplorer(true);
+    }
+    setTimeout(() => {
+      orderPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+  };
+
   // Open Razorpay Standard Checkout Modal
   const openRazorpayModal = (paymentData: any) => {
     if (!(window as any).Razorpay) {
@@ -706,7 +718,6 @@ export default function StudentPortal() {
       }, 100);
       
       setShowConsentModal(false);
-      setShowCart(false);
     } catch (e: any) {
       alert("Failed to place order: " + e.message);
     } finally {
@@ -796,7 +807,7 @@ export default function StudentPortal() {
 
             {isLoggedIn && getCartItemCount() > 0 && (
               <button
-                onClick={() => setShowCart(true)}
+                onClick={scrollToOrderPanel}
                 className="relative bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl flex items-center space-x-2 shadow-lg shadow-orange-500/20 active:scale-95 text-white font-bold transition"
               >
                 <ShoppingBag className="w-4 h-4" />
@@ -1635,7 +1646,7 @@ export default function StudentPortal() {
             </div>
 
             {/* Sticky Order Panel / Cart view */}
-            <div className="lg:col-span-1">
+            <div ref={orderPanelRef} className="lg:col-span-1 scroll-mt-24">
               <div className="bg-white border border-slate-200 rounded-3xl p-6 sticky top-24 shadow-md">
                 <h3 className="text-lg font-black border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2 text-slate-900">
                   <ShoppingBag className="w-5 h-5 text-orange-500" />

@@ -49,6 +49,14 @@ async function apiRequest<T>(
     headers,
   });
 
+  if (response.status === 401 && token) {
+    logout();
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+    throw new Error("Session expired");
+  }
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(
