@@ -59,6 +59,8 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Use(customMiddleware.RequireRole("admin"))
 
 				r.Get("/dashboard/summary", hCtx.GetDashboardSummary)
+				r.Get("/categories", hCtx.ListCategories)
+				r.Post("/categories", hCtx.CreateCategory)
 				r.Get("/products", hCtx.ListProducts)
 				r.Post("/products", hCtx.CreateProduct)
 				r.Put("/products/{id}", hCtx.UpdateProduct)

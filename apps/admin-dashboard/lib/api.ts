@@ -2,6 +2,7 @@ import {
   AuthResponse,
   DashboardSummary,
   Product,
+  Category,
   Student,
   DeliveryPartner,
   Order,
@@ -72,6 +73,15 @@ export const adminApi = {
 
   // Summary Metrics
   getSummary: () => apiRequest<DashboardSummary>("/dashboard/summary"),
+
+  // Categories
+  getCategories: () => apiRequest<Category[]>("/categories"),
+
+  createCategory: (name: string) =>
+    apiRequest<Category>("/categories", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
 
   // Products CRUD
   getProducts: () => apiRequest<Product[]>("/products"),

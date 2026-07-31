@@ -1063,6 +1063,23 @@ export default function StudentPortal() {
         {isLoggedIn && activeOrderID && trackingDetails && (
           <div className="mb-12 max-w-2xl mx-auto animate-fade-in">
             <div className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl">
+              <a
+                href="https://whatsapp.com/channel/0029VbD7NoSEVccDCgghMI3K"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 mb-6 bg-emerald-50 border-2 border-emerald-400 rounded-2xl px-4 py-3 hover:bg-emerald-100 transition"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm font-bold text-emerald-800">
+                    For exiting offers join this Channel
+                  </span>
+                </span>
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-700">
+                  Join
+                </span>
+              </a>
+
               {/* Active tracking header */}
               <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-6 mb-6">
                 <div>

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"campusbites/backend/internal/models"
 )
@@ -23,6 +25,10 @@ type CreateProductRequest struct {
 	MRP          float64 `json:"mrp"`
 	SellingPrice float64 `json:"selling_price"`
 	ImageURL     string  `json:"image_url"`
+}
+
+type CreateCategoryRequest struct {
+	Name string `json:"name"`
 }
 
 type AssignPartnerRequest struct {
@@ -173,6 +179,80 @@ func (h *HandlerContext) ListProducts(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, list)
 }
 
+// resolveCategoryID validates that value is a UUID and that the category exists.
+func (h *HandlerContext) resolveCategoryID(ctx context.Context, value string) (string, error) {
+	parsed, err := uuid.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return "", fmt.Errorf("invalid category selected")
+	}
+	id := parsed.String()
+	var exists bool
+	err = h.DB.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)", id).Scan(&exists)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate category")
+	}
+	if !exists {
+		return "", fmt.Errorf("invalid category selected")
+	}
+	return id, nil
+}
+
+// ListCategories returns all catalog categories.
+func (h *HandlerContext) ListCategories(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rows, err := h.DB.Pool.Query(ctx, `SELECT id, name FROM categories ORDER BY name ASC`)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to query categories")
+		return
+	}
+	defer rows.Close()
+
+	list := []models.Category{}
+	for rows.Next() {
+		var c models.Category
+		if err := rows.Scan(&c.ID, &c.Name); err == nil {
+			list = append(list, c)
+		}
+	}
+	RespondJSON(w, http.StatusOK, list)
+}
+
+// CreateCategory creates a new category (or returns the existing one on name conflict).
+func (h *HandlerContext) CreateCategory(w http.ResponseWriter, r *http.Request) {
+	adminID := r.Context().Value("user_id").(string)
+	var req CreateCategoryRequest
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		RespondError(w, http.StatusBadRequest, "category name is required")
+		return
+	}
+
+	ctx := r.Context()
+	var id string
+	err := h.DB.Pool.QueryRow(ctx, `
+		INSERT INTO categories (name) VALUES ($1)
+		ON CONFLICT (name) DO NOTHING
+		RETURNING id
+	`, name).Scan(&id)
+	if err != nil {
+		// Conflict / no row returned — fetch existing
+		err = h.DB.Pool.QueryRow(ctx, `SELECT id FROM categories WHERE name = $1`, name).Scan(&id)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "failed to create category")
+			return
+		}
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Created category: "+name, r)
+
+	RespondJSON(w, http.StatusCreated, models.Category{ID: id, Name: name})
+}
+
 func (h *HandlerContext) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	adminID := r.Context().Value("user_id").(string)
 	var req CreateProductRequest
@@ -182,15 +262,21 @@ func (h *HandlerContext) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	categoryID, err := h.resolveCategoryID(ctx, req.CategoryID)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	query := `
 		INSERT INTO products (name, category_id, mrp, selling_price, image_url, is_available)
 		VALUES ($1, $2, $3, $4, $5, true)
 		RETURNING id
 	`
 	var productID string
-	err := h.DB.Pool.QueryRow(ctx, query, req.Name, req.CategoryID, req.MRP, req.SellingPrice, req.ImageURL).Scan(&productID)
+	err = h.DB.Pool.QueryRow(ctx, query, req.Name, categoryID, req.MRP, req.SellingPrice, req.ImageURL).Scan(&productID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to insert product: "+err.Error())
+		RespondError(w, http.StatusInternalServerError, "failed to insert product")
 		return
 	}
 
@@ -520,9 +606,15 @@ func (h *HandlerContext) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	categoryID, err := h.resolveCategoryID(ctx, req.CategoryID)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Check if product exists
 	var existingName string
-	err := h.DB.Pool.QueryRow(ctx, "SELECT name FROM products WHERE id = $1", productID).Scan(&existingName)
+	err = h.DB.Pool.QueryRow(ctx, "SELECT name FROM products WHERE id = $1", productID).Scan(&existingName)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "product not found")
 		return
@@ -534,9 +626,9 @@ func (h *HandlerContext) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		SET name = $1, category_id = $2, mrp = $3, selling_price = $4, image_url = $5, is_available = $6
 		WHERE id = $7
 	`
-	_, err = h.DB.Pool.Exec(ctx, query, req.Name, req.CategoryID, req.MRP, req.SellingPrice, req.ImageURL, req.IsAvailable, productID)
+	_, err = h.DB.Pool.Exec(ctx, query, req.Name, categoryID, req.MRP, req.SellingPrice, req.ImageURL, req.IsAvailable, productID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to update product: "+err.Error())
+		RespondError(w, http.StatusInternalServerError, "failed to update product")
 		return
 	}
 

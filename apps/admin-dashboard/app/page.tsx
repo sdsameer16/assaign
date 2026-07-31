@@ -68,6 +68,9 @@ export default function AdminDashboard() {
 
   // Data lists
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [students, setStudents] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -75,7 +78,9 @@ export default function AdminDashboard() {
 
   // Forms and Modals
   const [newProductName, setNewProductName] = useState("");
-  const [newProductCategory, setNewProductCategory] = useState("Snacks");
+  const [newProductCategory, setNewProductCategory] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categorySaving, setCategorySaving] = useState(false);
   const [newProductMrp, setNewProductMrp] = useState("");
   const [newProductPrice, setNewProductPrice] = useState("");
   const [newProductImage, setNewProductImage] = useState(
@@ -178,6 +183,9 @@ export default function AdminDashboard() {
       const prodData = await adminApi.getProducts();
       setProducts(prodData || []);
 
+      const catData = await adminApi.getCategories();
+      setCategories(catData || []);
+
       const studentData = await adminApi.getStudents();
       setStudents(studentData || []);
 
@@ -236,20 +244,16 @@ export default function AdminDashboard() {
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProductName || !newProductPrice) return;
+    if (!newProductCategory) {
+      showToast("Please select a category.", "error");
+      return;
+    }
     try {
       setProductSaving(true);
 
-      // Look up category mapping (or seed mock ids)
-      // Since seed categories creates Snacks/Beverages/Meals, we pass mock names
-      // Our Go backend automatically accepts category name/id checks or maps it.
-      // Let's create dummy category mapping matching seeded ones
-      // Samosa category: "Snacks", Tea category: "Beverages", Burger category: "Meals"
-      // We will map based on string matches
-      let categoryId = "Snacks"; // Handled dynamically in backend seeding.
-
       await adminApi.createProduct({
         name: newProductName,
-        category_id: newProductCategory, // will resolve to UUID in DB
+        category_id: newProductCategory,
         mrp: Number(newProductMrp || newProductPrice),
         selling_price: Number(newProductPrice),
         image_url: newProductImage,
@@ -257,6 +261,7 @@ export default function AdminDashboard() {
 
       showToast("Product catalog updated successfully.", "success");
       setNewProductName("");
+      setNewProductCategory("");
       setNewProductPrice("");
       setNewProductMrp("");
       setShowAddProduct(false);
@@ -271,9 +276,34 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      showToast("Enter a category name.", "error");
+      return;
+    }
+    try {
+      setCategorySaving(true);
+      const created = await adminApi.createCategory(name);
+      const catData = await adminApi.getCategories();
+      setCategories(catData || []);
+      setNewProductCategory(created.id);
+      setNewCategoryName("");
+      showToast(`Category "${created.name}" ready.`, "success");
+    } catch (err: any) {
+      showToast("Failed to create category: " + err.message, "error");
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !editProductName || !editProductPrice) return;
+    if (!editProductCategory) {
+      showToast("Please select a category.", "error");
+      return;
+    }
     try {
       setProductUpdating(true);
       await adminApi.updateProduct(selectedProduct.id, {
@@ -789,24 +819,37 @@ export default function AdminDashboard() {
                               onChange={(e) =>
                                 setNewProductCategory(e.target.value)
                               }
+                              required
                               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white"
                             >
-                              {products.length > 0 &&
-                                Array.from(
-                                  new Set(products.map((p) => p.category_name)),
-                                ).map((catName) => (
-                                  <option
-                                    key={catName}
-                                    value={
-                                      products.find(
-                                        (p) => p.category_name === catName,
-                                      ).category_id
-                                    }
-                                  >
-                                    {catName}
-                                  </option>
-                                ))}
+                              <option value="" disabled>
+                                Select a category
+                              </option>
+                              {categories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
                             </select>
+                            <div className="mt-2 flex gap-2">
+                              <input
+                                type="text"
+                                value={newCategoryName}
+                                onChange={(e) =>
+                                  setNewCategoryName(e.target.value)
+                                }
+                                placeholder="+ New category name"
+                                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleCreateCategory}
+                                disabled={categorySaving}
+                                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg disabled:opacity-50"
+                              >
+                                {categorySaving ? "..." : "Add"}
+                              </button>
+                            </div>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -911,23 +954,17 @@ export default function AdminDashboard() {
                               onChange={(e) =>
                                 setEditProductCategory(e.target.value)
                               }
+                              required
                               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white"
                             >
-                              {products.length > 0 &&
-                                Array.from(
-                                  new Set(products.map((p) => p.category_name)),
-                                ).map((catName) => (
-                                  <option
-                                    key={catName}
-                                    value={
-                                      products.find(
-                                        (p) => p.category_name === catName,
-                                      ).category_id
-                                    }
-                                  >
-                                    {catName}
-                                  </option>
-                                ))}
+                              <option value="" disabled>
+                                Select a category
+                              </option>
+                              {categories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
                             </select>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
