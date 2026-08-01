@@ -390,6 +390,11 @@ export default function DeliveryPartnerApp() {
                                 <span className="text-slate-400 text-xs mt-1 block">
                                   Student: {order.student_name}
                                 </span>
+                                <span className="text-[10px] text-emerald-400 block">
+                                  {order.slot_name
+                                    ? `Slot: ${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
+                                    : "No slot assigned"}
+                                </span>
                                 <span className="text-[10px] text-slate-500 block truncate">
                                   {order.items
                                     .map(
@@ -437,6 +442,11 @@ export default function DeliveryPartnerApp() {
                           Assigned:{" "}
                           {new Date(record.assigned_at).toLocaleTimeString()}
                         </span>
+                        <span className="text-[9px] text-emerald-400 block mt-0.5">
+                          {record.slot_name
+                            ? `Slot: ${record.slot_name} (${record.slot_delivery_start}–${record.slot_delivery_end})`
+                            : "No slot assigned"}
+                        </span>
                       </div>
                       <div className="flex items-center space-x-1.5 text-emerald-400 font-bold">
                         <Check className="w-3.5 h-3.5" />
@@ -472,6 +482,11 @@ export default function DeliveryPartnerApp() {
                         <h3 className="text-2xl font-black text-white mt-1">
                           Room {selectedOrder.room_number}
                         </h3>
+                        <p className="text-[11px] text-emerald-400 font-semibold mt-1">
+                          {selectedOrder.slot_name
+                            ? `Slot: ${selectedOrder.slot_name} (${selectedOrder.slot_delivery_start}–${selectedOrder.slot_delivery_end})`
+                            : "No slot assigned"}
+                        </p>
                       </div>
                       <button
                         onClick={() => setSelectedOrder(null)}

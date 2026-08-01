@@ -75,15 +75,19 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 			o.id, o.order_number, s.short_name, s.mobile_number, 
 			o.room_number, o.building, o.floor, o.total_amount, 
 			o.status, o.special_instructions, p.status, da.assigned_at, 
-			da.delivered_at, da.not_available_flag, da.delivery_notes
+			da.delivered_at, da.not_available_flag, da.delivery_notes,
+			COALESCE(ds.name, ''),
+			COALESCE(TO_CHAR(ds.delivery_start, 'HH24:MI'), ''),
+			COALESCE(TO_CHAR(ds.delivery_end, 'HH24:MI'), '')
 		FROM orders o
 		JOIN students s ON o.student_id = s.id
 		JOIN payments p ON o.id = p.order_id
 		JOIN delivery_assignments da ON o.id = da.order_id
+		LEFT JOIN delivery_slots ds ON o.delivery_slot_id = ds.id
 		WHERE da.delivery_partner_id = $1
 			AND o.status IN ('assigned', 'out_for_delivery')
 			AND COALESCE(da.not_available_flag, false) = false
-		ORDER BY o.building ASC, o.floor ASC, o.room_number ASC
+		ORDER BY ds.delivery_start ASC NULLS LAST, o.building ASC, o.floor ASC, o.room_number ASC
 	`
 
 	rows, err := h.DB.Pool.Query(ctx, query, partnerID)
@@ -100,6 +104,7 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 		var deliveredAt sql.NullTime
 		var notes sql.NullString
 		var rawPaymentStatus string
+		var slotName, slotStart, slotEnd string
 
 		err := rows.Scan(
 			&o.ID,
@@ -117,6 +122,9 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 			&deliveredAt,
 			&o.NotAvailableFlag,
 			&notes,
+			&slotName,
+			&slotStart,
+			&slotEnd,
 		)
 		if err != nil {
 			RespondError(w, http.StatusInternalServerError, "data scan failed: "+err.Error())
@@ -132,6 +140,9 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 		if notes.Valid {
 			o.DeliveryNotes = notes.String
 		}
+		o.SlotName = slotName
+		o.SlotDeliveryStart = slotStart
+		o.SlotDeliveryEnd = slotEnd
 
 		// Simple Payment Status label: Paid vs Unpaid
 		if rawPaymentStatus == models.PaymentStatusPaid {
@@ -337,9 +348,13 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	query := `
-		SELECT o.order_number, o.room_number, o.building, o.floor, da.assigned_at, da.delivered_at, da.not_available_flag
+		SELECT o.order_number, o.room_number, o.building, o.floor, da.assigned_at, da.delivered_at, da.not_available_flag,
+		       COALESCE(ds.name, ''),
+		       COALESCE(TO_CHAR(ds.delivery_start, 'HH24:MI'), ''),
+		       COALESCE(TO_CHAR(ds.delivery_end, 'HH24:MI'), '')
 		FROM orders o
 		JOIN delivery_assignments da ON o.id = da.order_id
+		LEFT JOIN delivery_slots ds ON o.delivery_slot_id = ds.id
 		WHERE da.delivery_partner_id = $1 AND o.status = 'delivered'
 		ORDER BY da.delivered_at DESC
 		LIMIT 50
@@ -352,13 +367,16 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 	defer rows.Close()
 
 	type HistoryRecord struct {
-		OrderNumber      string     `json:"order_number"`
-		RoomNumber       string     `json:"room_number"`
-		Building         string     `json:"building"`
-		Floor            int        `json:"floor"`
-		AssignedAt       time.Time  `json:"assigned_at"`
-		DeliveredAt      *time.Time `json:"delivered_at"`
-		NotAvailableFlag bool       `json:"not_available_flag"`
+		OrderNumber       string     `json:"order_number"`
+		RoomNumber        string     `json:"room_number"`
+		Building          string     `json:"building"`
+		Floor             int        `json:"floor"`
+		AssignedAt        time.Time  `json:"assigned_at"`
+		DeliveredAt       *time.Time `json:"delivered_at"`
+		NotAvailableFlag  bool       `json:"not_available_flag"`
+		SlotName          string     `json:"slot_name"`
+		SlotDeliveryStart string     `json:"slot_delivery_start"`
+		SlotDeliveryEnd   string     `json:"slot_delivery_end"`
 	}
 
 	var records []HistoryRecord
@@ -373,6 +391,9 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 			&rec.AssignedAt,
 			&delTime,
 			&rec.NotAvailableFlag,
+			&rec.SlotName,
+			&rec.SlotDeliveryStart,
+			&rec.SlotDeliveryEnd,
 		)
 		if err == nil {
 			if delTime.Valid {

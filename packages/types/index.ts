@@ -85,8 +85,25 @@ export interface Order {
   status: OrderStatus;
   payment_status?: string;
   special_instructions?: string;
+  delivery_slot_id?: string;
+  slot_name?: string;
+  slot_delivery_start?: string;
+  slot_delivery_end?: string;
   created_at: string;
   items?: OrderItem[];
+}
+
+// Recurring daily delivery slot
+export interface DeliverySlot {
+  id: string;
+  name: string;
+  delivery_start: string; // HH:MM
+  delivery_end: string; // HH:MM
+  order_cutoff: string; // HH:MM
+  is_active: boolean;
+  is_ordering_open: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // Secure Order View for Delivery Partner
@@ -107,6 +124,9 @@ export interface DeliveryOrderView {
   delivered_at?: string;
   not_available_flag: boolean;
   delivery_notes?: string;
+  slot_name?: string;
+  slot_delivery_start?: string;
+  slot_delivery_end?: string;
 }
 
 // Payment details

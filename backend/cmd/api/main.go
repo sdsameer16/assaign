@@ -122,6 +122,18 @@ func runMigrations(db *database.DB) {
 		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted BOOLEAN DEFAULT FALSE",
 		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMP WITH TIME ZONE",
 		"ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'out_of_stock'",
+		`CREATE TABLE IF NOT EXISTS delivery_slots (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name VARCHAR(100) NOT NULL,
+			delivery_start TIME NOT NULL,
+			delivery_end TIME NOT NULL,
+			order_cutoff TIME NOT NULL,
+			is_active BOOLEAN DEFAULT TRUE,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)`,
+		"ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_slot_id UUID REFERENCES delivery_slots(id) ON DELETE SET NULL",
+		"CREATE INDEX IF NOT EXISTS idx_orders_delivery_slot ON orders(delivery_slot_id)",
 	}
 	for _, m := range migrations {
 		if _, err := db.Pool.Exec(ctx, m); err != nil {

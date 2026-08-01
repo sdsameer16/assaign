@@ -43,6 +43,7 @@ export default function AdminDashboard() {
     | "pickups"
     | "overview"
     | "products"
+    | "slots"
     | "students"
     | "partners"
     | "logs"
@@ -71,6 +72,13 @@ export default function AdminDashboard() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
   );
+  const [deliverySlots, setDeliverySlots] = useState<any[]>([]);
+  const [slotFormName, setSlotFormName] = useState("");
+  const [slotFormStart, setSlotFormStart] = useState("09:55");
+  const [slotFormEnd, setSlotFormEnd] = useState("10:10");
+  const [slotFormCutoff, setSlotFormCutoff] = useState("09:45");
+  const [slotSaving, setSlotSaving] = useState(false);
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -185,6 +193,13 @@ export default function AdminDashboard() {
 
       const catData = await adminApi.getCategories();
       setCategories(catData || []);
+
+      try {
+        const slotData = await adminApi.getDeliverySlots();
+        setDeliverySlots(slotData || []);
+      } catch (e) {
+        console.error("Failed to load delivery slots:", e);
+      }
 
       const studentData = await adminApi.getStudents();
       setStudents(studentData || []);
@@ -326,6 +341,67 @@ export default function AdminDashboard() {
       showToast("Failed to update product: " + err.message, "error");
     } finally {
       setProductUpdating(false);
+    }
+  };
+
+  const resetSlotForm = () => {
+    setEditingSlotId(null);
+    setSlotFormName("");
+    setSlotFormStart("09:55");
+    setSlotFormEnd("10:10");
+    setSlotFormCutoff("09:45");
+  };
+
+  const handleSaveSlot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slotFormName.trim() || !slotFormStart || !slotFormEnd || !slotFormCutoff) {
+      showToast("Fill all slot fields.", "error");
+      return;
+    }
+    try {
+      setSlotSaving(true);
+      const payload = {
+        name: slotFormName.trim(),
+        delivery_start: slotFormStart,
+        delivery_end: slotFormEnd,
+        order_cutoff: slotFormCutoff,
+      };
+      if (editingSlotId) {
+        await adminApi.updateDeliverySlot(editingSlotId, payload);
+        showToast("Delivery slot updated.", "success");
+      } else {
+        await adminApi.createDeliverySlot(payload);
+        showToast("Delivery slot added.", "success");
+      }
+      resetSlotForm();
+      const slotData = await adminApi.getDeliverySlots();
+      setDeliverySlots(slotData || []);
+    } catch (err: any) {
+      showToast(err.message || "Failed to save slot", "error");
+    } finally {
+      setSlotSaving(false);
+    }
+  };
+
+  const handleEditSlot = (slot: any) => {
+    setEditingSlotId(slot.id);
+    setSlotFormName(slot.name || "");
+    setSlotFormStart(slot.delivery_start || "");
+    setSlotFormEnd(slot.delivery_end || "");
+    setSlotFormCutoff(slot.order_cutoff || "");
+  };
+
+  const handleToggleSlot = async (slot: any) => {
+    try {
+      await adminApi.toggleDeliverySlot(slot.id, !slot.is_active);
+      const slotData = await adminApi.getDeliverySlots();
+      setDeliverySlots(slotData || []);
+      showToast(
+        `Slot ${!slot.is_active ? "activated" : "disabled"}.`,
+        "success",
+      );
+    } catch (err: any) {
+      showToast(err.message || "Failed to update slot", "error");
     }
   };
 
@@ -566,6 +642,7 @@ export default function AdminDashboard() {
                 { id: "pickups", label: "Counter Pickups", icon: Clock },
                 { id: "overview", label: "Overview Metrics", icon: TrendingUp },
                 { id: "products", label: "Product Catalog", icon: Layers },
+                { id: "slots", label: "Delivery Slots", icon: Clock },
                 { id: "students", label: "Verification Queue", icon: Users },
                 {
                   id: "partners",
@@ -1146,6 +1223,174 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {/* Tab: Delivery Slots */}
+              {activeTab === "slots" && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                      <h3 className="text-lg font-black text-white">
+                        Daily Delivery Slots
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Recurring every day (IST). A slot closes for ordering
+                        after its cutoff, even if the global cutoff is still open.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={resetSlotForm}
+                      className="text-[10px] font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-xl"
+                    >
+                      Add Another Slot
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={handleSaveSlot}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
+                  >
+                    <div>
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Slot Name
+                      </label>
+                      <input
+                        type="text"
+                        value={slotFormName}
+                        onChange={(e) => setSlotFormName(e.target.value)}
+                        placeholder="Morning Slot"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Order Before
+                      </label>
+                      <input
+                        type="time"
+                        value={slotFormCutoff}
+                        onChange={(e) => setSlotFormCutoff(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Delivery Start
+                      </label>
+                      <input
+                        type="time"
+                        value={slotFormStart}
+                        onChange={(e) => setSlotFormStart(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Delivery End
+                      </label>
+                      <input
+                        type="time"
+                        value={slotFormEnd}
+                        onChange={(e) => setSlotFormEnd(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white outline-none"
+                        required
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={slotSaving}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase py-2.5 rounded-xl disabled:opacity-50"
+                      >
+                        {slotSaving
+                          ? "Saving..."
+                          : editingSlotId
+                            ? "Update Slot"
+                            : "Save Slot"}
+                      </button>
+                      {editingSlotId && (
+                        <button
+                          type="button"
+                          onClick={resetSlotForm}
+                          className="px-3 py-2.5 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-xl"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </form>
+
+                  {deliverySlots.length === 0 ? (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center text-slate-500 font-bold">
+                      No delivery slots yet. Add your first slot above.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {deliverySlots.map((slot) => {
+                        const statusLabel = !slot.is_active
+                          ? "Disabled"
+                          : slot.is_ordering_open
+                            ? "Open"
+                            : "Cutoff Passed";
+                        const statusClass = !slot.is_active
+                          ? "bg-slate-800 text-slate-400"
+                          : slot.is_ordering_open
+                            ? "bg-emerald-950 text-emerald-400"
+                            : "bg-amber-950 text-amber-400";
+                        return (
+                          <div
+                            key={slot.id}
+                            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3"
+                          >
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <h4 className="font-black text-white text-sm">
+                                  {slot.name}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  Delivery {slot.delivery_start} –{" "}
+                                  {slot.delivery_end}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  Order before {slot.order_cutoff}
+                                </p>
+                              </div>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${statusClass}`}
+                              >
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <div className="flex gap-2 pt-2 border-t border-slate-850">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSlot(slot)}
+                                className="flex-1 text-[10px] font-bold bg-slate-950 border border-slate-800 text-indigo-300 py-2 rounded-xl"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSlot(slot)}
+                                className={`flex-1 text-[10px] font-bold py-2 rounded-xl border ${
+                                  slot.is_active
+                                    ? "bg-red-950/40 border-red-500/20 text-red-300"
+                                    : "bg-emerald-950/40 border-emerald-500/20 text-emerald-300"
+                                }`}
+                              >
+                                {slot.is_active ? "Disable" : "Activate"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Tab 3: OCR Student Approval Queue */}
               {activeTab === "students" && (
                 <div className="space-y-6">
@@ -1389,6 +1634,11 @@ export default function AdminDashboard() {
                             <div className="text-[10px] text-slate-550 pl-5 font-semibold">
                               Floor {order.floor}
                             </div>
+                            <div className="text-[10px] text-indigo-300 pl-5 font-semibold">
+                              {order.slot_name
+                                ? `Slot: ${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
+                                : "No slot assigned"}
+                            </div>
                           </div>
 
                           {/* Divider */}
@@ -1538,13 +1788,18 @@ export default function AdminDashboard() {
                           </div>
 
                           {/* Previous Location */}
-                          <div className="text-xs text-slate-400">
+                          <div className="text-xs text-slate-400 space-y-1">
                             <span className="text-[9px] font-bold text-slate-500 uppercase block mb-0.5">
                               Original Address
                             </span>
                             <span>
                               Room {order.room_number}, {order.building} (Floor{" "}
                               {order.floor})
+                            </span>
+                            <span className="block text-indigo-300 font-semibold">
+                              {order.slot_name
+                                ? `Slot: ${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
+                                : "No slot assigned"}
                             </span>
                           </div>
 

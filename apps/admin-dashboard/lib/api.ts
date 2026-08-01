@@ -3,6 +3,7 @@ import {
   DashboardSummary,
   Product,
   Category,
+  DeliverySlot,
   Student,
   DeliveryPartner,
   Order,
@@ -174,6 +175,41 @@ export const adminApi = {
     apiRequest<{ message: string }>("/cutoff", {
       method: "POST",
       body: JSON.stringify({ cutoff_time: cutoffTime }),
+    }),
+
+  getDeliverySlots: () => apiRequest<DeliverySlot[]>("/delivery-slots"),
+
+  createDeliverySlot: (data: {
+    name: string;
+    delivery_start: string;
+    delivery_end: string;
+    order_cutoff: string;
+    is_active?: boolean;
+  }) =>
+    apiRequest<DeliverySlot>("/delivery-slots", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateDeliverySlot: (
+    id: string,
+    data: {
+      name: string;
+      delivery_start: string;
+      delivery_end: string;
+      order_cutoff: string;
+      is_active?: boolean;
+    },
+  ) =>
+    apiRequest<DeliverySlot>(`/delivery-slots/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  toggleDeliverySlot: (id: string, isActive: boolean) =>
+    apiRequest<DeliverySlot>(`/delivery-slots/${id}/active`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: isActive }),
     }),
 
   sendNotification: (target: string, title: string, body: string) =>

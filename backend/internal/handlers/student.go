@@ -33,6 +33,7 @@ type CreateOrderRequest struct {
 	Building            string             `json:"building"`
 	Floor               int                `json:"floor"`
 	SpecialInstructions string             `json:"special_instructions"`
+	DeliverySlotID      string             `json:"delivery_slot_id"`
 	Items               []OrderItemRequest `json:"items"`
 }
 
@@ -334,7 +335,32 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if strings.TrimSpace(req.DeliverySlotID) == "" {
+		RespondError(w, http.StatusBadRequest, "delivery slot is required")
+		return
+	}
+
 	ctx := r.Context()
+
+	// Validate selected delivery slot is active and still open today (IST)
+	var slotActive bool
+	var slotCutoff string
+	err := h.DB.Pool.QueryRow(ctx, `
+		SELECT is_active, TO_CHAR(order_cutoff, 'HH24:MI')
+		FROM delivery_slots WHERE id = $1
+	`, req.DeliverySlotID).Scan(&slotActive, &slotCutoff)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid delivery slot")
+		return
+	}
+	if !slotActive {
+		RespondError(w, http.StatusBadRequest, "selected delivery slot is disabled")
+		return
+	}
+	if !isSlotOrderingOpen(slotCutoff, istNow()) {
+		RespondError(w, http.StatusForbidden, fmt.Sprintf("ordering for this slot closed at %s", slotCutoff))
+		return
+	}
 
 	// Cancel stale unpaid orders for this student (older than 30 minutes)
 	_, _ = h.DB.Pool.Exec(ctx, `
@@ -356,7 +382,7 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 
 	// Check if student is blocked
 	var status string
-	err := h.DB.Pool.QueryRow(ctx, `SELECT verification_status FROM students WHERE id = $1`, studentID).Scan(&status)
+	err = h.DB.Pool.QueryRow(ctx, `SELECT verification_status FROM students WHERE id = $1`, studentID).Scan(&status)
 	if err != nil || status == models.VerificationStatusRejected {
 		RespondError(w, http.StatusForbidden, "your account is blocked by an admin")
 		return
@@ -409,11 +435,11 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 
 	var orderID string
 	insertOrder := `
-		INSERT INTO orders (order_number, student_id, room_number, building, floor, total_amount, status, special_instructions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO orders (order_number, student_id, room_number, building, floor, total_amount, status, special_instructions, delivery_slot_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
-	err = tx.QueryRow(ctx, insertOrder, orderNum, studentID, req.RoomNumber, req.Building, req.Floor, totalAmount, models.OrderStatusReceived, req.SpecialInstructions).Scan(&orderID)
+	err = tx.QueryRow(ctx, insertOrder, orderNum, studentID, req.RoomNumber, req.Building, req.Floor, totalAmount, models.OrderStatusReceived, req.SpecialInstructions, req.DeliverySlotID).Scan(&orderID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "failed to save order header")
 		return

@@ -95,8 +95,25 @@ type Order struct {
 	TotalAmount         float64     `json:"total_amount"`
 	Status              string      `json:"status"`
 	SpecialInstructions string      `json:"special_instructions,omitempty"`
+	DeliverySlotID      string      `json:"delivery_slot_id,omitempty"`
+	SlotName            string      `json:"slot_name,omitempty"`
+	SlotDeliveryStart   string      `json:"slot_delivery_start,omitempty"`
+	SlotDeliveryEnd     string      `json:"slot_delivery_end,omitempty"`
 	CreatedAt           time.Time   `json:"created_at"`
 	Items               []OrderItem `json:"items,omitempty"`
+}
+
+// DeliverySlot model for recurring daily delivery windows
+type DeliverySlot struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	DeliveryStart   string    `json:"delivery_start"` // HH:MM
+	DeliveryEnd     string    `json:"delivery_end"`   // HH:MM
+	OrderCutoff     string    `json:"order_cutoff"`   // HH:MM
+	IsActive        bool      `json:"is_active"`
+	IsOrderingOpen  bool      `json:"is_ordering_open"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }
 
 // OrderItem model mapping to order_items table
@@ -195,4 +212,7 @@ type DeliveryOrderView struct {
 	DeliveredAt         *time.Time  `json:"delivered_at,omitempty"`
 	NotAvailableFlag    bool        `json:"not_available_flag"`
 	DeliveryNotes       string      `json:"delivery_notes,omitempty"`
+	SlotName            string      `json:"slot_name,omitempty"`
+	SlotDeliveryStart   string      `json:"slot_delivery_start,omitempty"`
+	SlotDeliveryEnd     string      `json:"slot_delivery_end,omitempty"`
 }

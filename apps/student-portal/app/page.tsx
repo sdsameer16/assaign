@@ -88,6 +88,18 @@ export default function StudentPortal() {
   const [showSupport, setShowSupport] = useState(false);
   const [cutoffTime, setCutoffTime] = useState<string | null>(null);
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+  const [deliverySlots, setDeliverySlots] = useState<
+    {
+      id: string;
+      name: string;
+      delivery_start: string;
+      delivery_end: string;
+      order_cutoff: string;
+      is_active: boolean;
+      is_ordering_open: boolean;
+    }[]
+  >([]);
+  const [selectedSlotId, setSelectedSlotId] = useState("");
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -107,6 +119,14 @@ export default function StudentPortal() {
     }
     loadMenu();
     fetchCutoffConfig();
+    fetchDeliverySlots();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDeliverySlots();
+    }, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const checkPrivacyStatus = async () => {
@@ -167,6 +187,22 @@ export default function StudentPortal() {
       }
     } catch (e) {
       console.error("Failed to load order cutoff config:", e);
+    }
+  };
+
+  const fetchDeliverySlots = async () => {
+    try {
+      const slots = await studentApi.getDeliverySlots();
+      setDeliverySlots(slots || []);
+      setSelectedSlotId((prev) => {
+        if (!prev) return prev;
+        const stillOpen = (slots || []).find(
+          (s) => s.id === prev && s.is_ordering_open,
+        );
+        return stillOpen ? prev : "";
+      });
+    } catch (e) {
+      console.error("Failed to load delivery slots:", e);
     }
   };
 
@@ -669,6 +705,16 @@ export default function StudentPortal() {
       alert(`Ordering has closed for today at ${cutoffTime}.`);
       return;
     }
+    if (!selectedSlotId) {
+      alert("Please select a delivery slot.");
+      return;
+    }
+    const selected = deliverySlots.find((s) => s.id === selectedSlotId);
+    if (!selected || !selected.is_ordering_open) {
+      alert("Selected delivery slot is closed. Please choose another slot.");
+      setSelectedSlotId("");
+      return;
+    }
     setConsentChecks([false, false, false, false]);
     setConsentInput("");
     setShowConsentModal(true);
@@ -716,6 +762,7 @@ export default function StudentPortal() {
         building,
         floor,
         special_instructions: specialInstructions,
+        delivery_slot_id: selectedSlotId,
         items,
       });
 
@@ -1809,6 +1856,58 @@ export default function StudentPortal() {
                       </div>
 
                       <div>
+                        <label className="text-[9px] font-bold text-slate-455 block mb-1.5">
+                          Delivery Slot
+                        </label>
+                        {deliverySlots.length === 0 ? (
+                          <p className="text-[10px] text-slate-500 font-semibold">
+                            No delivery slots configured yet.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {deliverySlots.map((slot) => {
+                              const closed = !slot.is_ordering_open;
+                              return (
+                                <label
+                                  key={slot.id}
+                                  className={`flex items-start gap-2 rounded-xl border p-2.5 cursor-pointer transition ${
+                                    closed
+                                      ? "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
+                                      : selectedSlotId === slot.id
+                                        ? "bg-orange-50 border-orange-400"
+                                        : "bg-slate-50 border-slate-200 hover:border-orange-300"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="delivery_slot"
+                                    value={slot.id}
+                                    checked={selectedSlotId === slot.id}
+                                    disabled={closed}
+                                    onChange={() => setSelectedSlotId(slot.id)}
+                                    className="mt-0.5"
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-bold text-slate-800">
+                                      {slot.name}
+                                      {closed ? " (Closed)" : ""}
+                                    </span>
+                                    <span className="block text-[10px] text-slate-500 font-semibold">
+                                      Delivery {slot.delivery_start} –{" "}
+                                      {slot.delivery_end}
+                                    </span>
+                                    <span className="block text-[10px] text-orange-600 font-semibold">
+                                      Order before {slot.order_cutoff}
+                                    </span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
                         <label className="text-[9px] font-bold text-slate-455">
                           Cooking Notes
                         </label>
@@ -1830,6 +1929,10 @@ export default function StudentPortal() {
                         checkoutLoading ||
                         !roomNumber ||
                         building !== "N Block" ||
+                        !selectedSlotId ||
+                        !deliverySlots.some(
+                          (s) => s.id === selectedSlotId && s.is_ordering_open,
+                        ) ||
                         (cutoffTime !== null && countdownSeconds === null)
                       }
                       className="w-full mt-2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-orange-500/20 active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"

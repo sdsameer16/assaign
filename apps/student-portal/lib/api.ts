@@ -113,6 +113,7 @@ export const studentApi = {
     building: string;
     floor: number;
     special_instructions: string;
+    delivery_slot_id: string;
     items: { product_id: string; quantity: number }[];
   }) =>
     apiRequest<{
@@ -169,6 +170,19 @@ export const studentApi = {
   getHistory: () => apiRequest<Order[]>("/orders/history"),
 
   getCutoff: () => apiRequest<{ cutoff_time: string }>("/cutoff"),
+
+  getDeliverySlots: () =>
+    apiRequest<
+      {
+        id: string;
+        name: string;
+        delivery_start: string;
+        delivery_end: string;
+        order_cutoff: string;
+        is_active: boolean;
+        is_ordering_open: boolean;
+      }[]
+    >("/delivery-slots"),
 
   saveFCMToken: (token: string) =>
     apiRequest<{ message: string }>("/fcm-token", {

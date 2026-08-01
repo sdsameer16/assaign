@@ -60,7 +60,19 @@ CREATE TABLE IF NOT EXISTS products (
     is_available BOOLEAN DEFAULT TRUE
 );
 
--- 5. Orders Table
+-- 5. Delivery Slots Table (recurring daily windows)
+CREATE TABLE IF NOT EXISTS delivery_slots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL,
+    delivery_start TIME NOT NULL,
+    delivery_end TIME NOT NULL,
+    order_cutoff TIME NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Orders Table
 CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_number VARCHAR(20) UNIQUE NOT NULL,
@@ -71,13 +83,15 @@ CREATE TABLE IF NOT EXISTS orders (
     total_amount DECIMAL(10,2) NOT NULL,
     status order_status DEFAULT 'received',
     special_instructions TEXT,
+    delivery_slot_id UUID REFERENCES delivery_slots(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_orders_student ON orders(student_id);
 CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_delivery_slot ON orders(delivery_slot_id);
 
--- 6. Order Items Table
+-- 7. Order Items Table
 CREATE TABLE IF NOT EXISTS order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -86,7 +100,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     unit_price DECIMAL(10,2) NOT NULL
 );
 
--- 7. Payments Table (Admin-only access for raw IDs, labels to delivery)
+-- 8. Payments Table (Admin-only access for raw IDs, labels to delivery)
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID UNIQUE NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
@@ -101,7 +115,7 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE INDEX idx_payments_order ON payments(order_id);
 
--- 8. Delivery Partners Table
+-- 9. Delivery Partners Table
 CREATE TABLE IF NOT EXISTS delivery_partners (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
@@ -112,7 +126,7 @@ CREATE TABLE IF NOT EXISTS delivery_partners (
     current_floor INT
 );
 
--- 9. Delivery Assignments Table
+-- 10. Delivery Assignments Table
 CREATE TABLE IF NOT EXISTS delivery_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID UNIQUE NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
@@ -125,7 +139,7 @@ CREATE TABLE IF NOT EXISTS delivery_assignments (
 
 CREATE INDEX idx_delivery_assignments_partner ON delivery_assignments(delivery_partner_id);
 
--- 10. Order Status History Table
+-- 11. Order Status History Table
 CREATE TABLE IF NOT EXISTS order_status_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -134,7 +148,7 @@ CREATE TABLE IF NOT EXISTS order_status_history (
     changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 11. Admin Users Table
+-- 12. Admin Users Table
 CREATE TABLE IF NOT EXISTS admin_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
@@ -144,7 +158,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 12. Audit Logs Table (Admin-only access)
+-- 13. Audit Logs Table (Admin-only access)
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     actor_id UUID NOT NULL,

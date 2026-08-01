@@ -536,12 +536,16 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		           FROM order_items oi
 		           JOIN products pr ON oi.product_id = pr.id
 		           WHERE oi.order_id = o.id
-		       ), 'No items') as items_summary
+		       ), 'No items') as items_summary,
+		       COALESCE(ds.name, ''),
+		       COALESCE(TO_CHAR(ds.delivery_start, 'HH24:MI'), ''),
+		       COALESCE(TO_CHAR(ds.delivery_end, 'HH24:MI'), '')
 		FROM orders o
 		JOIN students s ON o.student_id = s.id
 		JOIN payments p ON o.id = p.order_id
 		LEFT JOIN delivery_assignments da ON o.id = da.order_id
 		LEFT JOIN delivery_partners dp ON da.delivery_partner_id = dp.id
+		LEFT JOIN delivery_slots ds ON o.delivery_slot_id = ds.id
 		WHERE p.status = 'paid'
 		ORDER BY o.created_at DESC
 	`
@@ -568,6 +572,9 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		DeliveryPartnerName string    `json:"delivery_partner_name"`
 		NotAvailableFlag    bool      `json:"not_available_flag"`
 		ItemsSummary        string    `json:"items_summary"`
+		SlotName            string    `json:"slot_name"`
+		SlotDeliveryStart   string    `json:"slot_delivery_start"`
+		SlotDeliveryEnd     string    `json:"slot_delivery_end"`
 	}
 
 	var list []OrderAdminItem
@@ -577,6 +584,7 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 			&item.ID, &item.OrderNumber, &item.StudentID, &item.StudentName, &item.StudentPhone, &item.RoomNumber, &item.Building, &item.Floor,
 			&item.TotalAmount, &item.Status, &item.CreatedAt, &item.PaymentStatus, &item.DeliveryPartnerName,
 			&item.NotAvailableFlag, &item.ItemsSummary,
+			&item.SlotName, &item.SlotDeliveryStart, &item.SlotDeliveryEnd,
 		)
 		if err == nil {
 			list = append(list, item)
