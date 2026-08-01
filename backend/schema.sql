@@ -10,7 +10,7 @@ DROP TYPE IF EXISTS admin_role CASCADE;
 -- Create Types
 CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected');
 CREATE TYPE confidence_level AS ENUM ('high', 'medium', 'low');
-CREATE TYPE order_status AS ENUM ('received', 'preparing', 'packed', 'assigned', 'out_for_delivery', 'delivered', 'cancelled');
+CREATE TYPE order_status AS ENUM ('received', 'preparing', 'packed', 'assigned', 'out_for_delivery', 'delivered', 'cancelled', 'out_of_stock');
 CREATE TYPE payment_status AS ENUM ('created', 'paid', 'failed', 'refunded');
 CREATE TYPE admin_role AS ENUM ('super_admin', 'staff');
 

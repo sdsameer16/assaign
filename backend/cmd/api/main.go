@@ -121,6 +121,7 @@ func runMigrations(db *database.DB) {
 	migrations := []string{
 		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted BOOLEAN DEFAULT FALSE",
 		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMP WITH TIME ZONE",
+		"ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'out_of_stock'",
 	}
 	for _, m := range migrations {
 		if _, err := db.Pool.Exec(ctx, m); err != nil {

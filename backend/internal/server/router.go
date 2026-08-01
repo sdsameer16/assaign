@@ -69,6 +69,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Get("/delivery-partners", hCtx.GetDeliveryPartners)
 				r.Post("/delivery-partners", hCtx.CreateDeliveryPartner)
 				r.Post("/orders/{id}/assign", hCtx.AssignDeliveryPartner)
+				r.Post("/orders/{id}/out-of-stock", hCtx.MarkOrderOutOfStock)
 				r.Post("/orders/{id}/cancel", hCtx.CancelOrder)
 				r.Post("/orders/{id}/deliver", hCtx.DeliverOrder)
 				r.Get("/orders", hCtx.AdminGetOrders)

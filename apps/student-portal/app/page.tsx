@@ -136,11 +136,19 @@ export default function StudentPortal() {
     try {
       const history = await studentApi.getHistory();
       if (history && history.length > 0) {
+        const dismissedRaw =
+          typeof window !== "undefined"
+            ? localStorage.getItem("dismissed_out_of_stock")
+            : null;
+        const dismissed: string[] = dismissedRaw
+          ? JSON.parse(dismissedRaw)
+          : [];
         const active = history.find(
           (o) =>
             o.status !== "delivered" &&
             o.status !== "cancelled" &&
-            o.payment_status === "paid",
+            o.payment_status === "paid" &&
+            !(o.status === "out_of_stock" && dismissed.includes(o.id)),
         );
         if (active) {
           setActiveOrderID(active.id);
@@ -1091,6 +1099,52 @@ export default function StudentPortal() {
                 </span>
               </a>
 
+              {trackingDetails.order.status === "out_of_stock" ? (
+                <div className="text-center space-y-5">
+                  <div>
+                    <span className="text-red-500 text-xs font-black uppercase tracking-wider block mb-1">
+                      Out of Stock
+                    </span>
+                    <h2 className="text-2xl font-extrabold text-slate-900">
+                      Order #{trackingDetails.order.order_number}
+                    </h2>
+                  </div>
+                  <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 space-y-3">
+                    <h3 className="text-lg font-black text-red-700">
+                      Sorry for the inconvenience
+                    </h3>
+                    <p className="text-sm text-slate-700 font-semibold leading-relaxed">
+                      Our orders are out of stock. Your money will be refunded
+                      within the evening of this day.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (activeOrderID) {
+                        const dismissedRaw =
+                          localStorage.getItem("dismissed_out_of_stock");
+                        const dismissed: string[] = dismissedRaw
+                          ? JSON.parse(dismissedRaw)
+                          : [];
+                        if (!dismissed.includes(activeOrderID)) {
+                          dismissed.push(activeOrderID);
+                          localStorage.setItem(
+                            "dismissed_out_of_stock",
+                            JSON.stringify(dismissed),
+                          );
+                        }
+                      }
+                      setActiveOrderID(null);
+                      setTrackingDetails(null);
+                      setShowMenuExplorer(false);
+                    }}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl transition shadow-md shadow-orange-500/25"
+                  >
+                    OK
+                  </button>
+                </div>
+              ) : (
+                <>
               {/* Active tracking header */}
               <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-6 mb-6">
                 <div>
@@ -1384,6 +1438,8 @@ export default function StudentPortal() {
                       : "Explore Canteen Menu"}
                   </span>
                 </button>
+              )}
+                </>
               )}
             </div>
           </div>

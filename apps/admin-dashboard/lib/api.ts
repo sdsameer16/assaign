@@ -153,6 +153,11 @@ export const adminApi = {
       body: JSON.stringify({ delivery_partner_id: partnerId }),
     }),
 
+  markOutOfStock: (orderId: string) =>
+    apiRequest<{ message: string }>(`/orders/${orderId}/out-of-stock`, {
+      method: "POST",
+    }),
+
   cancelOrder: (orderId: string) =>
     apiRequest<{ message: string }>(`/orders/${orderId}/cancel`, {
       method: "POST",

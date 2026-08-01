@@ -9,7 +9,8 @@ export type OrderStatus =
   | "assigned"
   | "out_for_delivery"
   | "delivered"
-  | "cancelled";
+  | "cancelled"
+  | "out_of_stock";
 export type PaymentStatus = "created" | "paid" | "failed" | "refunded";
 export type AdminRole = "super_admin" | "staff";
 

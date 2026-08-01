@@ -80,7 +80,9 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 		JOIN students s ON o.student_id = s.id
 		JOIN payments p ON o.id = p.order_id
 		JOIN delivery_assignments da ON o.id = da.order_id
-		WHERE da.delivery_partner_id = $1 AND o.status IN ('assigned', 'out_for_delivery')
+		WHERE da.delivery_partner_id = $1
+			AND o.status IN ('assigned', 'out_for_delivery')
+			AND COALESCE(da.not_available_flag, false) = false
 		ORDER BY o.building ASC, o.floor ASC, o.room_number ASC
 	`
 

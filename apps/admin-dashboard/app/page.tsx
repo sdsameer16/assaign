@@ -387,13 +387,13 @@ export default function AdminDashboard() {
   const handleCancelOrder = async (orderId: string, phone: string) => {
     if (
       confirm(
-        `Mark this order as Out of Stock? UPI Refund notice will be dispatched to student mobile: ${phone}`,
+        `Mark this order as Out of Stock? Refund will be done manually by evening for student mobile: ${phone}`,
       )
     ) {
       try {
-        await adminApi.cancelOrder(orderId);
+        await adminApi.markOutOfStock(orderId);
         showToast(
-          `Out of Stock: Refund initiated to student UPI (mobile: ${phone}).`,
+          `Out of Stock: Order marked. Refund student manually by evening (mobile: ${phone}).`,
           "success",
         );
         fetchOrders();
@@ -472,7 +472,8 @@ export default function AdminDashboard() {
     (o) =>
       o.not_available_flag &&
       o.status !== "delivered" &&
-      o.status !== "cancelled",
+      o.status !== "cancelled" &&
+      o.status !== "out_of_stock",
   );
 
   return (
@@ -1409,9 +1410,11 @@ export default function AdminDashboard() {
                                 className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
                                   order.status === "delivered"
                                     ? "bg-emerald-950 text-emerald-400"
-                                    : order.status === "out_for_delivery"
-                                      ? "bg-teal-950 text-teal-400"
-                                      : "bg-slate-950 text-slate-400"
+                                    : order.status === "out_of_stock"
+                                      ? "bg-red-950 text-red-400"
+                                      : order.status === "out_for_delivery"
+                                        ? "bg-teal-950 text-teal-400"
+                                        : "bg-slate-950 text-slate-400"
                                 }`}
                               >
                                 {order.status.replace(/_/g, " ")}
@@ -1422,7 +1425,8 @@ export default function AdminDashboard() {
                             <div className="pt-2 flex items-center justify-between gap-3">
                               {/* Left Out of Stock button */}
                               {order.status !== "delivered" &&
-                                order.status !== "cancelled" && (
+                                order.status !== "cancelled" &&
+                                order.status !== "out_of_stock" && (
                                   <button
                                     onClick={() =>
                                       handleCancelOrder(

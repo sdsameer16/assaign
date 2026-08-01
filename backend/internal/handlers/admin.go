@@ -457,6 +457,10 @@ func (h *HandlerContext) AssignDeliveryPartner(w http.ResponseWriter, r *http.Re
 		RespondError(w, http.StatusBadRequest, "cannot assign unpaid order")
 		return
 	}
+	if currentStatus == models.OrderStatusOutOfStock || currentStatus == models.OrderStatusCancelled || currentStatus == models.OrderStatusDelivered {
+		RespondError(w, http.StatusBadRequest, "order cannot be assigned in status: "+currentStatus)
+		return
+	}
 	if currentStatus != models.OrderStatusReceived && currentStatus != models.OrderStatusPreparing && currentStatus != models.OrderStatusPacked {
 		RespondError(w, http.StatusBadRequest, "order cannot be assigned in status: "+currentStatus)
 		return
@@ -635,6 +639,59 @@ func (h *HandlerContext) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Updated product: "+existingName+" -> "+req.Name, r)
 
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "Product updated successfully"})
+}
+
+// MarkOrderOutOfStock marks a paid order as out of stock for manual refund (no Razorpay call).
+func (h *HandlerContext) MarkOrderOutOfStock(w http.ResponseWriter, r *http.Request) {
+	orderID := getRouteParam(r, "id")
+	adminID := r.Context().Value("user_id").(string)
+	ctx := r.Context()
+
+	var orderStatus string
+	err := h.DB.Pool.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, orderID).Scan(&orderStatus)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "order not found")
+		return
+	}
+	if orderStatus == models.OrderStatusOutOfStock {
+		RespondJSON(w, http.StatusOK, map[string]string{"message": "order already marked out of stock"})
+		return
+	}
+	if orderStatus == models.OrderStatusDelivered {
+		RespondError(w, http.StatusBadRequest, "cannot mark a delivered order as out of stock")
+		return
+	}
+	if orderStatus == models.OrderStatusCancelled {
+		RespondError(w, http.StatusBadRequest, "cannot mark a cancelled order as out of stock")
+		return
+	}
+
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "transaction failed")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `UPDATE orders SET status = $1 WHERE id = $2`, models.OrderStatusOutOfStock, orderID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to update order status")
+		return
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, $2, $3)`, orderID, models.OrderStatusOutOfStock, adminID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to save history log")
+		return
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit changes")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Marked order out of stock "+orderID, r)
+	RespondJSON(w, http.StatusOK, map[string]string{"message": "order marked out of stock"})
 }
 
 // CancelOrder handles marking an order as cancelled and refunding paid payments via Razorpay.

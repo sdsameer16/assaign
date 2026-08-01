@@ -27,6 +27,7 @@ const (
 	OrderStatusOutForDelivery = "out_for_delivery"
 	OrderStatusDelivered      = "delivered"
 	OrderStatusCancelled      = "cancelled"
+	OrderStatusOutOfStock     = "out_of_stock"
 )
 
 // Payment status types
