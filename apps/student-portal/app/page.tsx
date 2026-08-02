@@ -857,7 +857,11 @@ export default function StudentPortal() {
       } else if (typeof window !== "undefined" && "Notification" in window) {
         if (Notification.permission === "denied") {
           alert(
-            "Notifications are blocked in your browser. You can still order; enable notifications in site settings for live updates.",
+            "Notifications are blocked in your browser settings. Please allow notifications for CampusBites for live order updates and a better experience.",
+          );
+        } else {
+          alert(
+            "Please tap Allow on the browser notification prompt for real-time order updates and a better experience.",
           );
         }
       }
@@ -872,9 +876,20 @@ export default function StudentPortal() {
       !consentChecks[0] ||
       !consentChecks[1] ||
       !consentChecks[2] ||
+      !consentChecks[3] ||
       consentInput.toLowerCase() !== "ok dev"
     ) {
       return;
+    }
+
+    // Re-request / refresh notification permission on every order.
+    try {
+      const token = await requestForToken();
+      if (token) {
+        await studentApi.saveFCMToken(token);
+      }
+    } catch (e) {
+      console.warn("Notification setup on checkout failed", e);
     }
 
     const items = Object.entries(cart).map(([id, qty]) => ({
@@ -2271,15 +2286,21 @@ export default function StudentPortal() {
                   </span>
                 </label>
 
-                <label className="flex items-start space-x-3 cursor-pointer">
+                <label className="flex items-start space-x-3 cursor-pointer rounded-xl border border-orange-200 bg-orange-50/80 p-3">
                   <input
                     type="checkbox"
                     checked={Boolean(consentChecks[3])}
                     onChange={(e) => handleNotificationConsent(e.target.checked)}
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-orange-500"
                   />
                   <span className="text-sm text-slate-700 font-semibold leading-relaxed">
-                    Please select allow notification, to get real time order updates.
+                    <span className="inline-flex items-center gap-1.5 text-orange-600 font-black mb-1">
+                      <Bell className="w-4 h-4" />
+                      Allow notifications (required each order)
+                    </span>
+                    <span className="block">
+                      When your browser asks, tap <b>Allow</b> for live order updates and a better experience — status, delivery, and print-ready alerts.
+                    </span>
                   </span>
                 </label>
               </div>
@@ -2304,7 +2325,14 @@ export default function StudentPortal() {
               </div>
               <button
                 onClick={executeOrderPlacement}
-                disabled={!consentChecks[0] || !consentChecks[1] || !consentChecks[2] || consentInput.toLowerCase() !== "ok dev" || checkoutLoading}
+                disabled={
+                  !consentChecks[0] ||
+                  !consentChecks[1] ||
+                  !consentChecks[2] ||
+                  !consentChecks[3] ||
+                  consentInput.toLowerCase() !== "ok dev" ||
+                  checkoutLoading
+                }
                 className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black py-4 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center space-x-2"
               >
                 {checkoutLoading ? (

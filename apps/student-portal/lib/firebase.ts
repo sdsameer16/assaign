@@ -20,12 +20,9 @@ export const requestForToken = async (): Promise<string | null> => {
     const supported = await isSupported().catch(() => false);
     if (!supported) return null;
 
-    let permission = Notification.permission;
-    if (permission === 'default') {
-      permission = await Notification.requestPermission();
-    }
+    // Always ask on each order flow — browser shows the prompt when still undecided.
+    const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      // Blocked or denied — not an unexpected failure
       return null;
     }
 
