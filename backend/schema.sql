@@ -128,6 +128,14 @@ CREATE TABLE IF NOT EXISTS print_jobs (
 
 CREATE INDEX idx_print_jobs_order ON print_jobs(order_id);
 
+-- 7d. Tracking advertisement (singleton)
+CREATE TABLE IF NOT EXISTS tracking_ad (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    image_url TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 8. Payments Table (Admin-only access for raw IDs, labels to delivery)
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

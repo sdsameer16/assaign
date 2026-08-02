@@ -126,6 +126,13 @@ export interface PrintJob {
   line_total: number;
 }
 
+export interface TrackingAd {
+  id?: string;
+  is_enabled: boolean;
+  image_url: string;
+  updated_at?: string;
+}
+
 // Recurring daily delivery slot
 export interface DeliverySlot {
   id: string;

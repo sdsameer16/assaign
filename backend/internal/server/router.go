@@ -33,6 +33,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 			r.Get("/cutoff", hCtx.GetCutoffTime)
 			r.Get("/delivery-slots", hCtx.StudentListDeliverySlots)
 			r.Get("/print-pricing", hCtx.GetPrintPricing)
+			r.Get("/tracking-ad", hCtx.GetTrackingAd)
 
 			// Authenticated Student Endpoints
 			r.Group(func(r chi.Router) {
@@ -84,6 +85,8 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Patch("/delivery-slots/{id}/active", hCtx.ToggleDeliverySlotActive)
 				r.Get("/print-pricing", hCtx.GetPrintPricing)
 				r.Put("/print-pricing", hCtx.UpdatePrintPricing)
+				r.Get("/tracking-ad", hCtx.GetTrackingAd)
+				r.Put("/tracking-ad", hCtx.UpdateTrackingAd)
 				r.Post("/send-notification", hCtx.AdminSendNotification)
 			})
 		})

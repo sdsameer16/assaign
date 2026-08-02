@@ -9,6 +9,7 @@ import {
   Order,
   AuditLog,
   PrintPricing,
+  TrackingAd,
 } from "@campusbites/types";
 
 const API_BASE_URL =
@@ -222,6 +223,14 @@ export const adminApi = {
     color_double: number;
   }) =>
     apiRequest<PrintPricing>("/print-pricing", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  getTrackingAd: () => apiRequest<TrackingAd>("/tracking-ad"),
+
+  updateTrackingAd: (data: { is_enabled: boolean; image_url: string }) =>
+    apiRequest<TrackingAd>("/tracking-ad", {
       method: "PUT",
       body: JSON.stringify(data),
     }),

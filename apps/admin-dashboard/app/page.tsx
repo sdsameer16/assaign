@@ -27,8 +27,10 @@ import {
   Bell,
   MessageSquare,
   Printer,
+  ImageIcon,
 } from "lucide-react";
 import { adminApi, getToken, getProfile, logout, setSession } from "../lib/api";
+import { uploadAdImage } from "../lib/cloudinary";
 
 export default function AdminDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -46,6 +48,7 @@ export default function AdminDashboard() {
     | "products"
     | "slots"
     | "print-pricing"
+    | "tracking-ad"
     | "students"
     | "partners"
     | "logs"
@@ -117,6 +120,12 @@ export default function AdminDashboard() {
   const [printColorSingle, setPrintColorSingle] = useState("8");
   const [printColorDouble, setPrintColorDouble] = useState("10");
   const [printPricingSaving, setPrintPricingSaving] = useState(false);
+
+  // Tracking advertisement
+  const [trackingAdEnabled, setTrackingAdEnabled] = useState(false);
+  const [trackingAdImageUrl, setTrackingAdImageUrl] = useState("");
+  const [trackingAdUploading, setTrackingAdUploading] = useState(false);
+  const [trackingAdSaving, setTrackingAdSaving] = useState(false);
 
   // Partner creation Form
   const [newPartnerName, setNewPartnerName] = useState("");
@@ -218,6 +227,14 @@ export default function AdminDashboard() {
         setPrintColorDouble(String(pricing.color_double));
       } catch (e) {
         console.error("Failed to load print pricing:", e);
+      }
+
+      try {
+        const ad = await adminApi.getTrackingAd();
+        setTrackingAdEnabled(Boolean(ad.is_enabled));
+        setTrackingAdImageUrl(ad.image_url || "");
+      } catch (e) {
+        console.error("Failed to load tracking ad:", e);
       }
 
       const studentData = await adminApi.getStudents();
@@ -453,6 +470,46 @@ export default function AdminDashboard() {
       showToast(err.message || "Failed to save print pricing", "error");
     } finally {
       setPrintPricingSaving(false);
+    }
+  };
+
+  const handleTrackingAdFile = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setTrackingAdUploading(true);
+      const url = await uploadAdImage(file);
+      setTrackingAdImageUrl(url);
+      showToast("Image uploaded. Click Save to publish.", "success");
+    } catch (err: any) {
+      showToast(err.message || "Image upload failed", "error");
+    } finally {
+      setTrackingAdUploading(false);
+    }
+  };
+
+  const handleSaveTrackingAd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (trackingAdEnabled && !trackingAdImageUrl.trim()) {
+      showToast("Upload an advertisement image before enabling ads.", "error");
+      return;
+    }
+    try {
+      setTrackingAdSaving(true);
+      const ad = await adminApi.updateTrackingAd({
+        is_enabled: trackingAdEnabled,
+        image_url: trackingAdImageUrl.trim(),
+      });
+      setTrackingAdEnabled(Boolean(ad.is_enabled));
+      setTrackingAdImageUrl(ad.image_url || "");
+      showToast("Tracking advertisement saved.", "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to save tracking ad", "error");
+    } finally {
+      setTrackingAdSaving(false);
     }
   };
 
@@ -695,6 +752,7 @@ export default function AdminDashboard() {
                 { id: "products", label: "Product Catalog", icon: Layers },
                 { id: "slots", label: "Delivery Slots", icon: Clock },
                 { id: "print-pricing", label: "Print Pricing", icon: Printer },
+                { id: "tracking-ad", label: "Tracking Ad", icon: ImageIcon },
                 { id: "students", label: "Verification Queue", icon: Users },
                 {
                   id: "partners",
@@ -1521,6 +1579,85 @@ export default function AdminDashboard() {
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         "Save Rates"
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {activeTab === "tracking-ad" && (
+                <div className="space-y-6 max-w-xl">
+                  <div>
+                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-indigo-400" />
+                      Tracking Advertisement
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Upload one image from your dashboard. When enabled, students
+                      see it on the order tracking page (tracking starts minimized).
+                    </p>
+                  </div>
+                  <form
+                    onSubmit={handleSaveTrackingAd}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5"
+                  >
+                    <label className="flex items-center justify-between gap-4 cursor-pointer">
+                      <span className="text-sm font-bold text-slate-200">
+                        Allow advertising on tracking page
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={trackingAdEnabled}
+                        onChange={(e) => setTrackingAdEnabled(e.target.checked)}
+                        className="w-5 h-5 accent-indigo-500"
+                      />
+                    </label>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">
+                        Advertisement image
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                        onChange={handleTrackingAdFile}
+                        disabled={trackingAdUploading}
+                        className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-950 file:text-indigo-300 file:font-bold"
+                      />
+                      {trackingAdUploading && (
+                        <p className="text-[10px] text-indigo-300 mt-2 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Uploading
+                          to Cloudinary…
+                        </p>
+                      )}
+                    </div>
+
+                    {trackingAdImageUrl ? (
+                      <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
+                        <p className="text-[9px] font-bold text-slate-500 uppercase px-3 py-2 border-b border-slate-800">
+                          Preview (student view)
+                        </p>
+                        <img
+                          src={trackingAdImageUrl}
+                          alt="Tracking advertisement preview"
+                          className="w-full h-auto max-h-[50vh] object-contain bg-black"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-xs text-slate-500">
+                        No image uploaded yet
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={trackingAdSaving || trackingAdUploading}
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {trackingAdSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Save Advertisement"
                       )}
                     </button>
                   </form>

@@ -1,4 +1,4 @@
-import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintSides } from "@campusbites/types";
+import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintSides, TrackingAd } from "@campusbites/types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/student";
@@ -138,6 +138,8 @@ export const studentApi = {
     }),
 
   getPrintPricing: () => apiRequest<PrintPricing>("/print-pricing"),
+
+  getTrackingAd: () => apiRequest<TrackingAd>("/tracking-ad"),
 
   // Verify payment
   verifyPayment: (data: {

@@ -159,6 +159,12 @@ func runMigrations(db *database.DB) {
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		)`,
 		"CREATE INDEX IF NOT EXISTS idx_print_jobs_order ON print_jobs(order_id)",
+		`CREATE TABLE IF NOT EXISTS tracking_ad (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+			image_url TEXT NOT NULL DEFAULT '',
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 	for _, m := range migrations {
 		if _, err := db.Pool.Exec(ctx, m); err != nil {
@@ -250,6 +256,18 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 			log.Printf("Failed to seed print pricing: %v\n", err)
 		} else {
 			log.Println("Seeded default print pricing rates.")
+		}
+	}
+
+	// 4. Seed tracking ad singleton if empty
+	var trackingAdCount int
+	err = db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tracking_ad`).Scan(&trackingAdCount)
+	if err == nil && trackingAdCount == 0 {
+		_, err = db.Pool.Exec(ctx, `INSERT INTO tracking_ad (is_enabled, image_url) VALUES (FALSE, '')`)
+		if err != nil {
+			log.Printf("Failed to seed tracking_ad: %v\n", err)
+		} else {
+			log.Println("Seeded default tracking_ad row.")
 		}
 	}
 }

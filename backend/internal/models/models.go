@@ -151,6 +151,14 @@ type PrintJob struct {
 	LineTotal  float64 `json:"line_total"`
 }
 
+// TrackingAd is the singleton tracking-page advertisement config
+type TrackingAd struct {
+	ID        string    `json:"id,omitempty"`
+	IsEnabled bool      `json:"is_enabled"`
+	ImageURL  string    `json:"image_url"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
+
 // Payment model mapping to payments table
 type Payment struct {
 	ID                string    `json:"id"`

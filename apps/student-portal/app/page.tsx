@@ -23,8 +23,9 @@ import {
   Headphones,
   X,
   Printer,
+  Eye,
 } from "lucide-react";
-import { Product, Category, Student, Order, PrintPricing, PrintColorMode, PrintSides } from "@campusbites/types";
+import { Product, Category, Student, Order, PrintPricing, PrintColorMode, PrintSides, TrackingAd } from "@campusbites/types";
 import { requestForToken, onMessageListener } from "../lib/firebase";
 import {
   studentApi,
@@ -122,6 +123,8 @@ export default function StudentPortal() {
   const [activeOrderID, setActiveOrderID] = useState<string | null>(null);
   const [trackingDetails, setTrackingDetails] = useState<any>(null);
   const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [trackingAd, setTrackingAd] = useState<TrackingAd | null>(null);
+  const [trackingMinimized, setTrackingMinimized] = useState(false);
   const [showMenuExplorer, setShowMenuExplorer] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [cutoffTime, setCutoffTime] = useState<string | null>(null);
@@ -313,10 +316,27 @@ export default function StudentPortal() {
     let interval: NodeJS.Timeout;
     if (activeOrderID) {
       fetchTracking();
+      fetchTrackingAd();
       interval = setInterval(fetchTracking, 4000);
+    } else {
+      setTrackingAd(null);
+      setTrackingMinimized(false);
     }
     return () => clearInterval(interval);
   }, [activeOrderID]);
+
+  const fetchTrackingAd = async () => {
+    try {
+      const ad = await studentApi.getTrackingAd();
+      setTrackingAd(ad);
+      const active = Boolean(ad?.is_enabled && ad?.image_url);
+      setTrackingMinimized(active);
+    } catch (e) {
+      console.error("Failed to load tracking ad:", e);
+      setTrackingAd(null);
+      setTrackingMinimized(false);
+    }
+  };
 
   const runServerOcrPreview = async (idCardUrl: string) => {
     if (!regName.trim() || !regRoll.trim() || !idCardUrl) return;
@@ -1411,10 +1431,44 @@ export default function StudentPortal() {
                     OK
                   </button>
                 </div>
+              ) : trackingAd?.is_enabled &&
+                trackingAd.image_url &&
+                trackingMinimized ? (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-orange-100 bg-orange-50/80 rounded-2xl px-4 py-3">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block">
+                        Live order
+                      </span>
+                      <h2 className="text-base font-extrabold text-slate-900">
+                        Order #{trackingDetails.order.order_number}
+                      </h2>
+                      <span className="text-xs font-bold text-orange-700">
+                        ETA: {trackingDetails.eta_minutes} mins ·{" "}
+                        {trackingDetails.order.status.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTrackingMinimized(false)}
+                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      View tracking
+                    </button>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 overflow-hidden bg-slate-50">
+                    <img
+                      src={trackingAd.image_url}
+                      alt="Advertisement"
+                      className="w-full h-auto max-h-[70vh] object-contain mx-auto"
+                    />
+                  </div>
+                </div>
               ) : (
                 <>
               {/* Active tracking header */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-6 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-6 mb-6 gap-3">
                 <div>
                   <span className="text-orange-500 text-xs font-black uppercase tracking-wider block mb-1">
                     Live Delivery Progress
@@ -1423,11 +1477,33 @@ export default function StudentPortal() {
                     Order #{trackingDetails.order.order_number}
                   </h2>
                 </div>
-                <div className="mt-3 md:mt-0 bg-orange-50 border border-orange-100 px-4 py-2 rounded-xl flex items-center space-x-2">
-                  <Clock className="w-4 h-4 text-orange-600 animate-pulse" />
-                  <span className="text-sm font-bold text-orange-700">
-                    ETA: {trackingDetails.eta_minutes} mins
-                  </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="bg-orange-50 border border-orange-100 px-4 py-2 rounded-xl flex items-center space-x-2">
+                    <Clock className="w-4 h-4 text-orange-600 animate-pulse" />
+                    <span className="text-sm font-bold text-orange-700">
+                      ETA: {trackingDetails.eta_minutes} mins
+                    </span>
+                  </div>
+                  {trackingAd?.is_enabled && trackingAd.image_url && (
+                    <motion.button
+                      type="button"
+                      onClick={() => setTrackingMinimized(true)}
+                      animate={{ x: [0, 6, 0, -6, 0] }}
+                      transition={{
+                        duration: 1.6,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs pl-1.5 pr-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm"
+                    >
+                      <img
+                        src={trackingAd.image_url}
+                        alt=""
+                        className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-100"
+                      />
+                      Show ad
+                    </motion.button>
+                  )}
                 </div>
               </div>
 
