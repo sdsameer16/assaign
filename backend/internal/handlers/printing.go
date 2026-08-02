@@ -58,6 +58,17 @@ func rateForPrintJob(pricing models.PrintPricing, colorMode, sides string) (floa
 	return 0, fmt.Errorf("invalid color_mode/sides")
 }
 
+// billablePrintUnits returns document pages for single-sided, or ceil(pages/2) sheets for double.
+func billablePrintUnits(pageCount int, sides string) int {
+	if pageCount < 1 {
+		pageCount = 1
+	}
+	if strings.ToLower(sides) == "double" {
+		return (pageCount + 1) / 2
+	}
+	return pageCount
+}
+
 func validatePrintJobRequest(job PrintJobRequest) error {
 	if strings.TrimSpace(job.FileURL) == "" {
 		return fmt.Errorf("file_url is required")

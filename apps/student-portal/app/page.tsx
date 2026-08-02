@@ -36,9 +36,9 @@ import {
 import {
   uploadPrintFile,
   uploadImageDataUrl,
-  defaultPageCountForFile,
   isAcceptedPrintFile,
 } from "../lib/cloudinary";
+import { countPrintPages, pageCountHint, billablePrintUnits, PageCountSource } from "../lib/printPageCount";
 
 type CartPrintJob = {
   localId: string;
@@ -51,6 +51,15 @@ type CartPrintJob = {
   copies: number;
   unit_price: number;
   line_total: number;
+};
+
+type PrintDraftFile = {
+  file_url: string;
+  file_name: string;
+  file_type: string;
+  page_count: number;
+  estimated: number;
+  source: PageCountSource;
 };
 
 export default function StudentPortal() {
@@ -82,12 +91,10 @@ export default function StudentPortal() {
   const [printPricing, setPrintPricing] = useState<PrintPricing | null>(null);
   const [showPrintingsModal, setShowPrintingsModal] = useState(false);
   const [printUploading, setPrintUploading] = useState(false);
-  const [printDraftFiles, setPrintDraftFiles] = useState<
-    { file_url: string; file_name: string; file_type: string }[]
-  >([]);
+  const [printCounting, setPrintCounting] = useState(false);
+  const [printDraftFiles, setPrintDraftFiles] = useState<PrintDraftFile[]>([]);
   const [printColorMode, setPrintColorMode] = useState<PrintColorMode>("bw");
   const [printSides, setPrintSides] = useState<PrintSides>("single");
-  const [printPageCount, setPrintPageCount] = useState(1);
   const [printCopies, setPrintCopies] = useState(1);
 
   // Checkout Form states
@@ -531,10 +538,27 @@ export default function StudentPortal() {
     return sides === "double" ? pricing.color_double : pricing.color_single;
   };
 
+  const getDraftPageTotal = () =>
+    printDraftFiles.reduce((sum, f) => sum + (f.page_count || 0), 0);
+
+  const getDraftBillableUnits = () =>
+    printDraftFiles.reduce(
+      (sum, f) => sum + billablePrintUnits(f.page_count || 0, printSides),
+      0,
+    );
+
   const getPrintPreviewTotal = () => {
     if (!printPricing || printDraftFiles.length === 0) return 0;
     const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
-    return unit * printPageCount * printCopies * printDraftFiles.length;
+    return unit * getDraftBillableUnits() * printCopies;
+  };
+
+  const draftPageSource = (): PageCountSource | null => {
+    if (printDraftFiles.length === 0) return null;
+    if (printDraftFiles.every((f) => f.source === "office")) return "office";
+    if (printDraftFiles.every((f) => f.source === "pdf")) return "pdf";
+    if (printDraftFiles.every((f) => f.source === "image")) return "image";
+    return null;
   };
 
   const handlePrintFilesSelected = async (
@@ -555,28 +579,29 @@ export default function StudentPortal() {
 
     try {
       setPrintUploading(true);
+      setPrintCounting(true);
       if (!printPricing) await fetchPrintPricing();
-      const uploaded: {
-        file_url: string;
-        file_name: string;
-        file_type: string;
-      }[] = [];
+      const uploaded: PrintDraftFile[] = [];
       for (const file of files) {
-        const result = await uploadPrintFile(file);
+        const [result, pages] = await Promise.all([
+          uploadPrintFile(file),
+          countPrintPages(file),
+        ]);
         uploaded.push({
           file_url: result.url,
           file_name: result.fileName,
           file_type: result.fileType,
+          page_count: pages.billed,
+          estimated: pages.estimated,
+          source: pages.source,
         });
       }
       setPrintDraftFiles((prev) => [...prev, ...uploaded]);
-      if (uploaded.length === 1) {
-        setPrintPageCount(defaultPageCountForFile(uploaded[0].file_name));
-      }
     } catch (err: any) {
       alert(err.message || "Upload failed");
     } finally {
       setPrintUploading(false);
+      setPrintCounting(false);
     }
   };
 
@@ -589,29 +614,34 @@ export default function StudentPortal() {
       alert("Please upload at least one file.");
       return;
     }
-    if (printPageCount <= 0 || printCopies <= 0) {
-      alert("Page count and copies must be greater than zero.");
+    if (printDraftFiles.some((f) => !f.page_count || f.page_count <= 0)) {
+      alert("Page count is still being calculated. Please wait.");
+      return;
+    }
+    if (printCopies <= 0) {
+      alert("Copies must be greater than zero.");
       return;
     }
 
     const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
-    const lineTotal = unit * printPageCount * printCopies;
-    const newJobs: CartPrintJob[] = printDraftFiles.map((f) => ({
-      localId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      file_url: f.file_url,
-      file_name: f.file_name,
-      file_type: f.file_type,
-      color_mode: printColorMode,
-      sides: printSides,
-      page_count: printPageCount,
-      copies: printCopies,
-      unit_price: unit,
-      line_total: lineTotal,
-    }));
+    const newJobs: CartPrintJob[] = printDraftFiles.map((f) => {
+      const units = billablePrintUnits(f.page_count, printSides);
+      return {
+        localId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file_url: f.file_url,
+        file_name: f.file_name,
+        file_type: f.file_type,
+        color_mode: printColorMode,
+        sides: printSides,
+        page_count: f.page_count,
+        copies: printCopies,
+        unit_price: unit,
+        line_total: unit * units * printCopies,
+      };
+    });
 
     setPrintJobs((prev) => [...prev, ...newJobs]);
     setPrintDraftFiles([]);
-    setPrintPageCount(1);
     setPrintCopies(1);
     setPrintColorMode("bw");
     setPrintSides("single");
@@ -2371,7 +2401,7 @@ export default function StudentPortal() {
                 <span>Printings</span>
               </h2>
               <p className="text-xs text-slate-500 mb-5">
-                Upload files, set pages &amp; options, then add to your cart.
+                Upload files — page count is detected automatically, then add to cart.
               </p>
 
               <div className="space-y-4">
@@ -2384,12 +2414,17 @@ export default function StudentPortal() {
                     multiple
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.jpeg,.jpg,.png,application/pdf,image/jpeg,image/png"
                     onChange={handlePrintFilesSelected}
-                    disabled={printUploading}
+                    disabled={printUploading || printCounting}
                     className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-600 file:font-bold"
                   />
-                  {printUploading && (
+                  {(printUploading || printCounting) && (
                     <p className="text-[10px] text-orange-500 mt-1 flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
+                      <Loader2 className="w-3 h-3 animate-spin" />{" "}
+                      {printUploading && printCounting
+                        ? "Uploading & counting pages…"
+                        : printCounting
+                          ? "Counting pages…"
+                          : "Uploading…"}
                     </p>
                   )}
                   {printDraftFiles.length > 0 && (
@@ -2397,9 +2432,16 @@ export default function StudentPortal() {
                       {printDraftFiles.map((f, i) => (
                         <li
                           key={`${f.file_url}-${i}`}
-                          className="text-xs text-slate-700 bg-slate-50 rounded-lg px-2 py-1.5 flex justify-between gap-2"
+                          className="text-xs text-slate-700 bg-slate-50 rounded-lg px-2 py-1.5 flex justify-between gap-2 items-center"
                         >
-                          <span className="truncate">{f.file_name}</span>
+                          <div className="min-w-0 flex-1">
+                            <span className="truncate block">{f.file_name}</span>
+                            <span className="text-[10px] text-slate-500">
+                              {f.source === "office"
+                                ? `Est. ${f.estimated} + 2 buffer = ${f.page_count} pages`
+                                : `${f.page_count} page${f.page_count === 1 ? "" : "s"}`}
+                            </span>
+                          </div>
                           <button
                             type="button"
                             className="text-red-500 shrink-0"
@@ -2458,12 +2500,23 @@ export default function StudentPortal() {
                     <input
                       type="number"
                       min={1}
-                      value={printPageCount}
-                      onChange={(e) =>
-                        setPrintPageCount(Math.max(1, Number(e.target.value) || 1))
-                      }
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
+                      value={getDraftPageTotal() || ""}
+                      disabled
+                      readOnly
+                      placeholder="—"
+                      className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs text-slate-600 outline-none cursor-not-allowed"
                     />
+                    <p className="text-[9px] text-slate-500 mt-1 leading-snug">
+                      {printDraftFiles.length === 0
+                        ? "Filled automatically after upload"
+                        : pageCountHint(draftPageSource())}
+                      {printDraftFiles.some((f) => f.source === "office") &&
+                        draftPageSource() !== "office" &&
+                        " · Office files include +2 buffer"}
+                      {" · "}
+                      Double-sided is charged per sheet (ceil of pages ÷ 2) at
+                      the double rate.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
@@ -2484,7 +2537,9 @@ export default function StudentPortal() {
                 {printPricing && (
                   <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs space-y-1">
                     <div className="flex justify-between text-slate-600">
-                      <span>Rate / page</span>
+                      <span>
+                        {printSides === "double" ? "Rate / sheet" : "Rate / page"}
+                      </span>
                       <span className="font-bold text-slate-800">
                         ₹
                         {rateForPrintOptions(
@@ -2494,6 +2549,28 @@ export default function StudentPortal() {
                         ).toFixed(2)}
                       </span>
                     </div>
+                    {printDraftFiles.length > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>
+                          {printSides === "double"
+                            ? "Billable sheets"
+                            : "Billable pages"}
+                        </span>
+                        <span className="font-bold text-slate-800 text-right">
+                          {printSides === "double" ? (
+                            <>
+                              {getDraftBillableUnits()} sheets (from{" "}
+                              {getDraftPageTotal()} pages) × {printCopies}{" "}
+                              copies
+                            </>
+                          ) : (
+                            <>
+                              {getDraftPageTotal()} × {printCopies} copies
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-black text-orange-600">
                       <span>Preview total</span>
                       <span>₹{getPrintPreviewTotal().toFixed(2)}</span>
@@ -2511,8 +2588,9 @@ export default function StudentPortal() {
                   onClick={addPrintJobsToCart}
                   disabled={
                     printUploading ||
+                    printCounting ||
                     printDraftFiles.length === 0 ||
-                    printPageCount <= 0 ||
+                    getDraftPageTotal() <= 0 ||
                     printCopies <= 0
                   }
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center space-x-2"

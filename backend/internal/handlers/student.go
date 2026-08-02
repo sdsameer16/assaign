@@ -442,7 +442,8 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 				RespondError(w, http.StatusBadRequest, fmt.Sprintf("print job %d: %s", i+1, rateErr.Error()))
 				return
 			}
-			lineTotal := unitPrice * float64(job.PageCount) * float64(job.Copies)
+			units := billablePrintUnits(job.PageCount, job.Sides)
+			lineTotal := unitPrice * float64(units) * float64(job.Copies)
 			totalAmount += lineTotal
 			computedPrintJobs = append(computedPrintJobs, computedPrintJob{req: job, unitPrice: unitPrice, lineTotal: lineTotal})
 		}
