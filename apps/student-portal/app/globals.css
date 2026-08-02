@@ -25,62 +25,217 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Animated printer icon (paper in/out) for Printings CTA */
-.printer-icon-wrap {
+/* Attractive Printings CTA — animated mini printer */
+.printings-cta {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 45%, #c2410c 100%);
+  overflow: visible;
+}
+
+.printings-cta:hover {
+  background: linear-gradient(135deg, #fb923c 0%, #f97316 45%, #ea580c 100%);
+}
+
+.printings-cta-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #fdba74, #f97316, #fb923c);
+  opacity: 0;
+  z-index: -1;
+  filter: blur(8px);
+  transition: opacity 0.3s ease;
+  animation: printings-pulse 2.4s ease-in-out infinite;
+}
+
+.printings-cta:hover .printings-cta-glow {
+  opacity: 0.55;
+}
+
+@keyframes printings-pulse {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.03);
+  }
+}
+
+.printer-scene {
+  position: relative;
+  width: 40px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.printer-body {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+  border-radius: 5px 5px 4px 4px;
+  box-shadow:
+    0 2px 0 #9a3412,
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  z-index: 2;
+}
+
+.printer-body::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: -4px;
+  height: 5px;
+  background: #fed7aa;
+  border-radius: 3px 3px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.printer-slot {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  top: 5px;
+  height: 4px;
+  background: #7c2d12;
+  border-radius: 1px;
   overflow: hidden;
 }
 
-.printer-paper {
+.printer-led {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+  animation: led-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes led-blink {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 6px #4ade80;
+  }
+  80% {
+    opacity: 0.35;
+    box-shadow: 0 0 2px #4ade80;
+  }
+}
+
+.printer-head {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 6px;
+  height: 6px;
+  background: #ea580c;
+  border-radius: 1px;
+  animation: print-head 2s ease-in-out infinite;
+  z-index: 3;
+}
+
+@keyframes print-head {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(14px);
+  }
+}
+
+.printer-sheet {
   position: absolute;
   left: 50%;
-  width: 8px;
-  height: 3px;
-  margin-left: -4px;
-  background: #fb923c;
+  width: 16px;
+  margin-left: -8px;
+  background: #fff;
+  border: 1px solid #fdba74;
   border-radius: 1px;
-  opacity: 0.85;
   pointer-events: none;
+  z-index: 1;
+  box-shadow: 0 1px 2px rgba(124, 45, 18, 0.15);
 }
 
-.printer-paper-in {
-  top: -2px;
-  animation: paper-in 1.6s ease-in-out infinite;
+.printer-sheet-in {
+  height: 10px;
+  top: 2px;
+  animation: sheet-feed-in 2.2s ease-in-out infinite;
 }
 
-.printer-paper-out {
-  bottom: -2px;
-  animation: paper-out 1.6s ease-in-out infinite;
+.printer-sheet-out {
+  height: 12px;
+  bottom: 0;
+  z-index: 0;
+  animation: sheet-feed-out 2.2s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-@keyframes paper-in {
+.printer-sheet-lines {
+  width: 10px;
+  height: 7px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #fdba74 0px,
+    #fdba74 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.7;
+}
+
+@keyframes sheet-feed-in {
   0%,
-  15% {
+  12% {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  35% {
+    transform: translateY(2px);
+    opacity: 1;
+  }
+  50%,
+  100% {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-feed-out {
+  0%,
+  40% {
     transform: translateY(-6px);
     opacity: 0;
   }
-  40% {
-    transform: translateY(4px);
-    opacity: 0.9;
+  60% {
+    transform: translateY(2px);
+    opacity: 1;
   }
-  55%,
+  85%,
   100% {
-    transform: translateY(8px);
+    transform: translateY(14px);
     opacity: 0;
   }
 }
 
-@keyframes paper-out {
-  0%,
-  45% {
-    transform: translateY(-4px);
-    opacity: 0;
-  }
-  70% {
-    transform: translateY(2px);
-    opacity: 0.9;
-  }
-  100% {
-    transform: translateY(8px);
-    opacity: 0;
-  }
+.group:hover .printer-head {
+  animation-duration: 1.1s;
+}
+
+.group:hover .printer-sheet-in,
+.group:hover .printer-sheet-out {
+  animation-duration: 1.3s;
 }

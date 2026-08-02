@@ -982,15 +982,34 @@ export default function StudentPortal() {
                     setShowPrintingsModal(true);
                     if (!printPricing) fetchPrintPricing();
                   }}
-                  className="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition text-slate-700 font-semibold"
-                  title="Printings"
+                  className="printings-cta group relative flex items-center gap-2.5 pl-1.5 pr-3.5 py-1.5 rounded-2xl text-white font-bold shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 active:scale-[0.97] transition-all"
+                  title="Printings — upload docs to print"
                 >
-                  <span className="printer-icon-wrap relative inline-flex w-5 h-5 items-center justify-center text-orange-500">
-                    <Printer className="w-4 h-4" />
-                    <span className="printer-paper printer-paper-in" />
-                    <span className="printer-paper printer-paper-out" />
+                  <span className="printings-cta-glow" aria-hidden />
+                  <span className="printer-scene" aria-hidden>
+                    <span className="printer-body">
+                      <span className="printer-slot" />
+                      <span className="printer-led" />
+                      <span className="printer-head" />
+                    </span>
+                    <span className="printer-sheet printer-sheet-in" />
+                    <span className="printer-sheet printer-sheet-out">
+                      <span className="printer-sheet-lines" />
+                    </span>
                   </span>
-                  <span className="text-sm hidden sm:inline">Printings</span>
+                  <span className="flex flex-col items-start leading-none pr-0.5">
+                    <span className="text-[13px] sm:text-sm tracking-tight">
+                      Printings
+                    </span>
+                    <span className="text-[9px] font-semibold text-orange-100/90 mt-0.5 hidden xs:inline sm:inline">
+                      PDF · Docs · Photos
+                    </span>
+                  </span>
+                  {printJobs.length > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-slate-900 text-[10px] font-black flex items-center justify-center border-2 border-white shadow">
+                      {printJobs.length}
+                    </span>
+                  )}
                 </button>
 
                 <button
