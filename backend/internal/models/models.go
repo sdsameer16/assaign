@@ -126,6 +126,31 @@ type OrderItem struct {
 	UnitPrice   float64 `json:"unit_price"`
 }
 
+// PrintPricing holds per-page print rates
+type PrintPricing struct {
+	ID           string    `json:"id,omitempty"`
+	BWSingle     float64   `json:"bw_single"`
+	BWDouble     float64   `json:"bw_double"`
+	ColorSingle  float64   `json:"color_single"`
+	ColorDouble  float64   `json:"color_double"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+}
+
+// PrintJob is a print line item on an order
+type PrintJob struct {
+	ID         string  `json:"id,omitempty"`
+	OrderID    string  `json:"order_id,omitempty"`
+	FileURL    string  `json:"file_url"`
+	FileName   string  `json:"file_name"`
+	FileType   string  `json:"file_type"`
+	ColorMode  string  `json:"color_mode"` // bw | color
+	Sides      string  `json:"sides"`      // single | double
+	PageCount  int     `json:"page_count"`
+	Copies     int     `json:"copies"`
+	UnitPrice  float64 `json:"unit_price"`
+	LineTotal  float64 `json:"line_total"`
+}
+
 // Payment model mapping to payments table
 type Payment struct {
 	ID                string    `json:"id"`
@@ -207,6 +232,7 @@ type DeliveryOrderView struct {
 	Status              string      `json:"status"`
 	SpecialInstructions string      `json:"special_instructions,omitempty"`
 	Items               []OrderItem `json:"items"`
+	PrintJobs           []PrintJob  `json:"print_jobs,omitempty"`
 	PaymentStatus       string      `json:"payment_status"` // "Paid" or "Unpaid" only
 	AssignedAt          time.Time   `json:"assigned_at"`
 	DeliveredAt         *time.Time  `json:"delivered_at,omitempty"`

@@ -91,6 +91,39 @@ export interface Order {
   slot_delivery_end?: string;
   created_at: string;
   items?: OrderItem[];
+  items_summary?: string;
+  print_jobs?: PrintJob[];
+  print_jobs_summary?: string;
+  student_name?: string;
+  student_phone?: string;
+  delivery_partner_name?: string;
+  not_available_flag?: boolean;
+}
+
+export type PrintColorMode = "bw" | "color";
+export type PrintSides = "single" | "double";
+
+export interface PrintPricing {
+  id?: string;
+  bw_single: number;
+  bw_double: number;
+  color_single: number;
+  color_double: number;
+  updated_at?: string;
+}
+
+export interface PrintJob {
+  id?: string;
+  order_id?: string;
+  file_url: string;
+  file_name: string;
+  file_type: string;
+  color_mode: PrintColorMode;
+  sides: PrintSides;
+  page_count: number;
+  copies: number;
+  unit_price: number;
+  line_total: number;
 }
 
 // Recurring daily delivery slot
@@ -119,6 +152,7 @@ export interface DeliveryOrderView {
   status: OrderStatus;
   special_instructions?: string;
   items: OrderItem[];
+  print_jobs?: PrintJob[];
   payment_status: "Paid" | "Unpaid";
   assigned_at: string;
   delivered_at?: string;

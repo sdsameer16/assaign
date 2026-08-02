@@ -26,6 +26,9 @@ type Config struct {
 	RazorpayKeySecret     string
 	RazorpayWebhookSecret string
 	AllowedOrigins        []string
+	CloudinaryCloudName   string
+	CloudinaryAPIKey      string
+	CloudinaryAPISecret   string
 }
 
 func LoadConfig() *Config {
@@ -101,6 +104,13 @@ func LoadConfig() *Config {
 		}
 	}
 
+	cloudinaryCloudName := getEnv("CLOUDINARY_CLOUD_NAME", "")
+	cloudinaryAPIKey := getEnv("CLOUDINARY_API_KEY", "")
+	cloudinaryAPISecret := getEnv("CLOUDINARY_API_SECRET", "")
+	if cloudinaryCloudName == "" || cloudinaryAPIKey == "" || cloudinaryAPISecret == "" {
+		log.Println("WARNING: Cloudinary delete credentials incomplete (CLOUDINARY_CLOUD_NAME / API_KEY / API_SECRET). Print files will not auto-delete after delivery.")
+	}
+
 	return &Config{
 		Port:                  port,
 		Env:                   env,
@@ -118,6 +128,9 @@ func LoadConfig() *Config {
 		RazorpayKeySecret:     rzpSecret,
 		RazorpayWebhookSecret: rzpWebhookSecret,
 		AllowedOrigins:        allowedOrigins,
+		CloudinaryCloudName:   cloudinaryCloudName,
+		CloudinaryAPIKey:      cloudinaryAPIKey,
+		CloudinaryAPISecret:   cloudinaryAPISecret,
 	}
 }
 

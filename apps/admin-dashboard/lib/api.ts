@@ -8,6 +8,7 @@ import {
   DeliveryPartner,
   Order,
   AuditLog,
+  PrintPricing,
 } from "@campusbites/types";
 
 const API_BASE_URL =
@@ -210,6 +211,19 @@ export const adminApi = {
     apiRequest<DeliverySlot>(`/delivery-slots/${id}/active`, {
       method: "PATCH",
       body: JSON.stringify({ is_active: isActive }),
+    }),
+
+  getPrintPricing: () => apiRequest<PrintPricing>("/print-pricing"),
+
+  updatePrintPricing: (data: {
+    bw_single: number;
+    bw_double: number;
+    color_single: number;
+    color_double: number;
+  }) =>
+    apiRequest<PrintPricing>("/print-pricing", {
+      method: "PUT",
+      body: JSON.stringify(data),
     }),
 
   sendNotification: (target: string, title: string, body: string) =>

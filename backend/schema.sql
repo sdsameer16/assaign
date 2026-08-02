@@ -100,6 +100,34 @@ CREATE TABLE IF NOT EXISTS order_items (
     unit_price DECIMAL(10,2) NOT NULL
 );
 
+-- 7b. Print Pricing (singleton row of per-page rates)
+CREATE TABLE IF NOT EXISTS print_pricing (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bw_single DECIMAL(10,2) NOT NULL DEFAULT 2.00,
+    bw_double DECIMAL(10,2) NOT NULL DEFAULT 3.00,
+    color_single DECIMAL(10,2) NOT NULL DEFAULT 8.00,
+    color_double DECIMAL(10,2) NOT NULL DEFAULT 10.00,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7c. Print Jobs linked to orders
+CREATE TABLE IF NOT EXISTS print_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    file_url TEXT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(50) NOT NULL,
+    color_mode VARCHAR(10) NOT NULL CHECK (color_mode IN ('bw', 'color')),
+    sides VARCHAR(10) NOT NULL CHECK (sides IN ('single', 'double')),
+    page_count INT NOT NULL CHECK (page_count > 0),
+    copies INT NOT NULL CHECK (copies > 0),
+    unit_price DECIMAL(10,2) NOT NULL,
+    line_total DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_print_jobs_order ON print_jobs(order_id);
+
 -- 8. Payments Table (Admin-only access for raw IDs, labels to delivery)
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -22,8 +22,9 @@ import {
   HelpCircle,
   Headphones,
   X,
+  Printer,
 } from "lucide-react";
-import { Product, Category, Student, Order } from "@campusbites/types";
+import { Product, Category, Student, Order, PrintPricing, PrintColorMode, PrintSides } from "@campusbites/types";
 import { requestForToken, onMessageListener } from "../lib/firebase";
 import {
   studentApi,
@@ -32,6 +33,25 @@ import {
   logout,
   setSession,
 } from "../lib/api";
+import {
+  uploadPrintFile,
+  uploadImageDataUrl,
+  defaultPageCountForFile,
+  isAcceptedPrintFile,
+} from "../lib/cloudinary";
+
+type CartPrintJob = {
+  localId: string;
+  file_url: string;
+  file_name: string;
+  file_type: string;
+  color_mode: PrintColorMode;
+  sides: PrintSides;
+  page_count: number;
+  copies: number;
+  unit_price: number;
+  line_total: number;
+};
 
 export default function StudentPortal() {
   // Authentication & Profile states
@@ -58,6 +78,17 @@ export default function StudentPortal() {
 
   // Cart state
   const [cart, setCart] = useState<{ [product_id: string]: number }>({});
+  const [printJobs, setPrintJobs] = useState<CartPrintJob[]>([]);
+  const [printPricing, setPrintPricing] = useState<PrintPricing | null>(null);
+  const [showPrintingsModal, setShowPrintingsModal] = useState(false);
+  const [printUploading, setPrintUploading] = useState(false);
+  const [printDraftFiles, setPrintDraftFiles] = useState<
+    { file_url: string; file_name: string; file_type: string }[]
+  >([]);
+  const [printColorMode, setPrintColorMode] = useState<PrintColorMode>("bw");
+  const [printSides, setPrintSides] = useState<PrintSides>("single");
+  const [printPageCount, setPrintPageCount] = useState(1);
+  const [printCopies, setPrintCopies] = useState(1);
 
   // Checkout Form states
   const [roomNumber, setRoomNumber] = useState("");
@@ -120,7 +151,17 @@ export default function StudentPortal() {
     loadMenu();
     fetchCutoffConfig();
     fetchDeliverySlots();
+    fetchPrintPricing();
   }, []);
+
+  const fetchPrintPricing = async () => {
+    try {
+      const data = await studentApi.getPrintPricing();
+      setPrintPricing(data);
+    } catch (e) {
+      console.error("Failed to load print pricing:", e);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -354,37 +395,10 @@ export default function StudentPortal() {
         setOcrLoading(true);
 
         // Upload to Cloudinary
-        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-        const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-        if (!cloudName || !uploadPreset) {
-          throw new Error("Cloudinary configuration is missing in environment variables.");
-        }
-
-        const formData = new FormData();
-        formData.append("file", dataUrl);
-        formData.append("upload_preset", uploadPreset);
         try {
-          const response = await fetch(
-            `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-            {
-              method: "POST",
-              body: formData,
-            },
-          );
-          if (!response.ok) {
-            const errRes = await response.json().catch(() => ({}));
-            throw new Error(
-              errRes.error?.message || `HTTP error ${response.status}`,
-            );
-          }
-          const result = await response.json();
-          if (result.secure_url) {
-            setRegIDUrl(result.secure_url);
-            await runServerOcrPreview(result.secure_url);
-          } else {
-            throw new Error(result.error?.message || "Upload failed");
-          }
+          const secureUrl = await uploadImageDataUrl(dataUrl);
+          setRegIDUrl(secureUrl);
+          await runServerOcrPreview(secureUrl);
         } catch (uploadErr: any) {
           console.error("Cloudinary upload error:", uploadErr);
           alert(
@@ -501,8 +515,112 @@ export default function StudentPortal() {
     setProfile(null);
     setToken(null);
     setCart({});
+    setPrintJobs([]);
     setActiveOrderID(null);
     setShowMenuExplorer(false);
+  };
+
+  const rateForPrintOptions = (
+    pricing: PrintPricing,
+    colorMode: PrintColorMode,
+    sides: PrintSides,
+  ) => {
+    if (colorMode === "bw") {
+      return sides === "double" ? pricing.bw_double : pricing.bw_single;
+    }
+    return sides === "double" ? pricing.color_double : pricing.color_single;
+  };
+
+  const getPrintPreviewTotal = () => {
+    if (!printPricing || printDraftFiles.length === 0) return 0;
+    const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
+    return unit * printPageCount * printCopies * printDraftFiles.length;
+  };
+
+  const handlePrintFilesSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      if (!isAcceptedPrintFile(file.name)) {
+        alert(
+          `Unsupported file: ${file.name}. Accepted: pdf, doc, docx, xls, xlsx, jpeg, jpg, png`,
+        );
+        return;
+      }
+    }
+
+    try {
+      setPrintUploading(true);
+      if (!printPricing) await fetchPrintPricing();
+      const uploaded: {
+        file_url: string;
+        file_name: string;
+        file_type: string;
+      }[] = [];
+      for (const file of files) {
+        const result = await uploadPrintFile(file);
+        uploaded.push({
+          file_url: result.url,
+          file_name: result.fileName,
+          file_type: result.fileType,
+        });
+      }
+      setPrintDraftFiles((prev) => [...prev, ...uploaded]);
+      if (uploaded.length === 1) {
+        setPrintPageCount(defaultPageCountForFile(uploaded[0].file_name));
+      }
+    } catch (err: any) {
+      alert(err.message || "Upload failed");
+    } finally {
+      setPrintUploading(false);
+    }
+  };
+
+  const addPrintJobsToCart = () => {
+    if (!printPricing) {
+      alert("Print pricing is not available yet. Please try again.");
+      return;
+    }
+    if (printDraftFiles.length === 0) {
+      alert("Please upload at least one file.");
+      return;
+    }
+    if (printPageCount <= 0 || printCopies <= 0) {
+      alert("Page count and copies must be greater than zero.");
+      return;
+    }
+
+    const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
+    const lineTotal = unit * printPageCount * printCopies;
+    const newJobs: CartPrintJob[] = printDraftFiles.map((f) => ({
+      localId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file_url: f.file_url,
+      file_name: f.file_name,
+      file_type: f.file_type,
+      color_mode: printColorMode,
+      sides: printSides,
+      page_count: printPageCount,
+      copies: printCopies,
+      unit_price: unit,
+      line_total: lineTotal,
+    }));
+
+    setPrintJobs((prev) => [...prev, ...newJobs]);
+    setPrintDraftFiles([]);
+    setPrintPageCount(1);
+    setPrintCopies(1);
+    setPrintColorMode("bw");
+    setPrintSides("single");
+    setShowPrintingsModal(false);
+    scrollToOrderPanel();
+  };
+
+  const removePrintJob = (localId: string) => {
+    setPrintJobs((prev) => prev.filter((j) => j.localId !== localId));
   };
 
   // Cart operations
@@ -522,15 +640,23 @@ export default function StudentPortal() {
     });
   };
 
-  const getCartTotal = () => {
+  const getFoodTotal = () => {
     return Object.entries(cart).reduce((total, [id, qty]) => {
       const prod = products.find((p) => p.id === id);
       return total + (prod ? prod.selling_price * qty : 0);
     }, 0);
   };
 
+  const getPrintTotal = () => {
+    return printJobs.reduce((sum, j) => sum + j.line_total, 0);
+  };
+
+  const getCartTotal = () => getFoodTotal() + getPrintTotal();
+
   const getCartItemCount = () => {
-    return Object.values(cart).reduce((sum, qty) => sum + qty, 0);
+    return (
+      Object.values(cart).reduce((sum, qty) => sum + qty, 0) + printJobs.length
+    );
   };
 
   const scrollToOrderPanel = () => {
@@ -562,6 +688,7 @@ export default function StudentPortal() {
       setActiveOrderID(paymentData.order_id);
       setActivePayment(null);
       setCart({});
+      setPrintJobs([]);
     };
 
     const pollUntilPaid = async (timeoutMs = 60000) => {
@@ -755,6 +882,11 @@ export default function StudentPortal() {
       quantity: qty,
     }));
 
+    if (items.length === 0 && printJobs.length === 0) {
+      alert("Add food items or print jobs before checkout.");
+      return;
+    }
+
     try {
       setCheckoutLoading(true);
       const data = await studentApi.createOrder({
@@ -764,6 +896,15 @@ export default function StudentPortal() {
         special_instructions: specialInstructions,
         delivery_slot_id: selectedSlotId,
         items,
+        print_jobs: printJobs.map((j) => ({
+          file_url: j.file_url,
+          file_name: j.file_name,
+          file_type: j.file_type,
+          color_mode: j.color_mode,
+          sides: j.sides,
+          page_count: j.page_count,
+          copies: j.copies,
+        })),
       });
 
       setActivePayment(data);
@@ -836,6 +977,22 @@ export default function StudentPortal() {
           <div className="flex items-center space-x-4">
             {isLoggedIn && profile && (
               <>
+                <button
+                  onClick={() => {
+                    setShowPrintingsModal(true);
+                    if (!printPricing) fetchPrintPricing();
+                  }}
+                  className="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition text-slate-700 font-semibold"
+                  title="Printings"
+                >
+                  <span className="printer-icon-wrap relative inline-flex w-5 h-5 items-center justify-center text-orange-500">
+                    <Printer className="w-4 h-4" />
+                    <span className="printer-paper printer-paper-in" />
+                    <span className="printer-paper printer-paper-out" />
+                  </span>
+                  <span className="text-sm hidden sm:inline">Printings</span>
+                </button>
+
                 <button
                   onClick={() => {
                     loadProfile();
@@ -1760,16 +1917,16 @@ export default function StudentPortal() {
                   <div className="text-center py-12 text-slate-500">
                     <span className="block text-4xl mb-3">🛒</span>
                     <p className="text-xs font-semibold">
-                      Your food cart is empty.
+                      Your cart is empty.
                     </p>
                     <p className="text-[10px] text-slate-450 mt-1">
-                      Select meals from menu grid to add.
+                      Add meals or print jobs to continue.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {/* Cart Items list */}
-                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                       {Object.entries(cart).map(([id, qty]) => {
                         const prod = products.find((p) => p.id === id);
                         if (!prod) return null;
@@ -1787,6 +1944,35 @@ export default function StudentPortal() {
                           </div>
                         );
                       })}
+                      {printJobs.map((job) => (
+                        <div
+                          key={job.localId}
+                          className="flex justify-between items-start text-xs gap-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="text-slate-700 font-semibold truncate block">
+                              🖨️ {job.file_name}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {job.color_mode === "bw" ? "B&W" : "Color"} ·{" "}
+                              {job.sides} · {job.page_count}p ×{job.copies}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-semibold text-slate-800">
+                              ₹{job.line_total.toFixed(0)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removePrintJob(job.localId)}
+                              className="text-red-500 hover:text-red-600"
+                              title="Remove print job"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
                     <div className="border-t border-slate-150 pt-3 flex justify-between items-center text-xs font-bold">
@@ -2111,6 +2297,183 @@ export default function StudentPortal() {
                   </>
                 )}
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Printings Modal */}
+      <AnimatePresence>
+        {showPrintingsModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
+            >
+              <button
+                onClick={() => setShowPrintingsModal(false)}
+                className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <h2 className="text-xl font-black text-slate-800 mb-1 flex items-center space-x-2">
+                <Printer className="w-6 h-6 text-orange-500" />
+                <span>Printings</span>
+              </h2>
+              <p className="text-xs text-slate-500 mb-5">
+                Upload files, set pages &amp; options, then add to your cart.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Upload files
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpeg,.jpg,.png,application/pdf,image/jpeg,image/png"
+                    onChange={handlePrintFilesSelected}
+                    disabled={printUploading}
+                    className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-600 file:font-bold"
+                  />
+                  {printUploading && (
+                    <p className="text-[10px] text-orange-500 mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
+                    </p>
+                  )}
+                  {printDraftFiles.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {printDraftFiles.map((f, i) => (
+                        <li
+                          key={`${f.file_url}-${i}`}
+                          className="text-xs text-slate-700 bg-slate-50 rounded-lg px-2 py-1.5 flex justify-between gap-2"
+                        >
+                          <span className="truncate">{f.file_name}</span>
+                          <button
+                            type="button"
+                            className="text-red-500 shrink-0"
+                            onClick={() =>
+                              setPrintDraftFiles((prev) =>
+                                prev.filter((_, idx) => idx !== i),
+                              )
+                            }
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Color mode
+                    </label>
+                    <select
+                      value={printColorMode}
+                      onChange={(e) =>
+                        setPrintColorMode(e.target.value as PrintColorMode)
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
+                    >
+                      <option value="bw">Black &amp; White</option>
+                      <option value="color">Color</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Sides
+                    </label>
+                    <select
+                      value={printSides}
+                      onChange={(e) =>
+                        setPrintSides(e.target.value as PrintSides)
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
+                    >
+                      <option value="single">Single sided</option>
+                      <option value="double">Double sided</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Page count
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={printPageCount}
+                      onChange={(e) =>
+                        setPrintPageCount(Math.max(1, Number(e.target.value) || 1))
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Copies
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={printCopies}
+                      onChange={(e) =>
+                        setPrintCopies(Math.max(1, Number(e.target.value) || 1))
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                {printPricing && (
+                  <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Rate / page</span>
+                      <span className="font-bold text-slate-800">
+                        ₹
+                        {rateForPrintOptions(
+                          printPricing,
+                          printColorMode,
+                          printSides,
+                        ).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-black text-orange-600">
+                      <span>Preview total</span>
+                      <span>₹{getPrintPreviewTotal().toFixed(2)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 pt-1">
+                      B&amp;W ₹{printPricing.bw_single}/{printPricing.bw_double} ·
+                      Color ₹{printPricing.color_single}/
+                      {printPricing.color_double} (single/double)
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={addPrintJobsToCart}
+                  disabled={
+                    printUploading ||
+                    printDraftFiles.length === 0 ||
+                    printPageCount <= 0 ||
+                    printCopies <= 0
+                  }
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center space-x-2"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span>Add to Cart</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -11,14 +11,15 @@ import (
 )
 
 type HandlerContext struct {
-	DB             *database.DB
-	Redis          *database.RedisDB
-	AuthService    *services.AuthService
-	OCRService     *services.OCRService
-	PaymentService *services.PaymentService
-	AuditService   *services.AuditService
-	FCMService     *services.FCMService
-	OrderQueue     *services.OrderQueue
+	DB                *database.DB
+	Redis             *database.RedisDB
+	AuthService       *services.AuthService
+	OCRService        *services.OCRService
+	PaymentService    *services.PaymentService
+	AuditService      *services.AuditService
+	FCMService        *services.FCMService
+	OrderQueue        *services.OrderQueue
+	CloudinaryService *services.CloudinaryService
 }
 
 func NewHandlerContext(
@@ -30,16 +31,18 @@ func NewHandlerContext(
 	audit *services.AuditService,
 	fcm *services.FCMService,
 	orderQueue *services.OrderQueue,
+	cloudinary *services.CloudinaryService,
 ) *HandlerContext {
 	return &HandlerContext{
-		DB:             db,
-		Redis:          rdb,
-		AuthService:    auth,
-		OCRService:     ocr,
-		PaymentService: payment,
-		AuditService:   audit,
-		FCMService:     fcm,
-		OrderQueue:     orderQueue,
+		DB:                db,
+		Redis:             rdb,
+		AuthService:       auth,
+		OCRService:        ocr,
+		PaymentService:    payment,
+		AuditService:      audit,
+		FCMService:        fcm,
+		OrderQueue:        orderQueue,
+		CloudinaryService: cloudinary,
 	}
 }
 

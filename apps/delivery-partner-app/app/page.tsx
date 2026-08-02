@@ -19,6 +19,8 @@ import {
   Check,
   Navigation,
   ClipboardList,
+  Download,
+  Printer,
 } from "lucide-react";
 import { DeliveryOrderView } from "@campusbites/types";
 import {
@@ -28,6 +30,7 @@ import {
   logout,
   setSession,
 } from "../lib/api";
+import { downloadPrintFile } from "../lib/download";
 
 export default function DeliveryPartnerApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -396,12 +399,21 @@ export default function DeliveryPartnerApp() {
                                     : "No slot assigned"}
                                 </span>
                                 <span className="text-[10px] text-slate-500 block truncate">
-                                  {order.items
-                                    .map(
-                                      (i) => `${i.product_name} x${i.quantity}`,
-                                    )
-                                    .join(", ")}
+                                  {(order.items || []).length > 0
+                                    ? (order.items || [])
+                                        .map(
+                                          (i) =>
+                                            `${i.product_name} x${i.quantity}`,
+                                        )
+                                        .join(", ")
+                                    : "No food items"}
                                 </span>
+                                {order.print_jobs && order.print_jobs.length > 0 && (
+                                  <span className="text-[10px] text-amber-400 block mt-0.5">
+                                    {order.print_jobs.length} print job
+                                    {order.print_jobs.length > 1 ? "s" : ""}
+                                  </span>
+                                )}
                               </div>
                               <ChevronRight className="w-4 h-4 text-slate-600" />
                             </div>
@@ -447,6 +459,12 @@ export default function DeliveryPartnerApp() {
                             ? `Slot: ${record.slot_name} (${record.slot_delivery_start}–${record.slot_delivery_end})`
                             : "No slot assigned"}
                         </span>
+                        {record.print_jobs && record.print_jobs.length > 0 && (
+                          <span className="text-[9px] text-amber-400 block mt-0.5">
+                            {record.print_jobs.length} print job
+                            {record.print_jobs.length > 1 ? "s" : ""}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-1.5 text-emerald-400 font-bold">
                         <Check className="w-3.5 h-3.5" />
@@ -520,21 +538,72 @@ export default function DeliveryPartnerApp() {
                         Items list
                       </span>
                       <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-850 space-y-1.5">
-                        {selectedOrder.items.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between text-xs"
-                          >
-                            <span className="text-slate-300 font-medium">
-                              {item.product_name}
-                            </span>
-                            <span className="text-white font-extrabold">
-                              x{item.quantity}
-                            </span>
-                          </div>
-                        ))}
+                        {(!selectedOrder.items ||
+                          selectedOrder.items.length === 0) ? (
+                          <p className="text-xs text-slate-500">No food items</p>
+                        ) : (
+                          selectedOrder.items.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="flex justify-between text-xs"
+                            >
+                              <span className="text-slate-300 font-medium">
+                                {item.product_name}
+                              </span>
+                              <span className="text-white font-extrabold">
+                                x{item.quantity}
+                              </span>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
+
+                    {selectedOrder.print_jobs &&
+                      selectedOrder.print_jobs.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block flex items-center gap-1">
+                            <Printer className="w-3 h-3" /> Print Jobs
+                          </span>
+                          <div className="bg-slate-950/50 rounded-xl p-3 border border-amber-900/30 space-y-2">
+                            {selectedOrder.print_jobs.map((job, idx) => (
+                              <div
+                                key={job.id || idx}
+                                className="flex justify-between items-start gap-2 text-xs"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-slate-200 font-semibold truncate">
+                                    {job.file_name}
+                                  </p>
+                                  <p className="text-[10px] text-slate-500">
+                                    {job.color_mode === "bw" ? "B&W" : "Color"} ·{" "}
+                                    {job.sides} · {job.page_count}p ×{job.copies}
+                                  </p>
+                                </div>
+                                {job.file_url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      downloadPrintFile(
+                                        job.file_url,
+                                        job.file_name || "print-file.pdf",
+                                      )
+                                    }
+                                    className="shrink-0 flex items-center gap-1 bg-amber-950/50 border border-amber-800/40 text-amber-300 px-2 py-1 rounded-lg font-bold text-[10px] hover:bg-amber-900/40"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    Download
+                                  </button>
+                                ) : (
+                                  <span className="shrink-0 text-[10px] text-slate-500 font-semibold">
+                                    File removed
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                     {/* Special instruction text */}
                     {selectedOrder.special_instructions && (

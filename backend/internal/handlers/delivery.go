@@ -160,7 +160,7 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 		`
 		itemRows, err := h.DB.Pool.Query(ctx, itemQuery, o.ID)
 		if err == nil {
-			var items []models.OrderItem
+			items := make([]models.OrderItem, 0)
 			for itemRows.Next() {
 				var item models.OrderItem
 				if err := itemRows.Scan(&item.ID, &item.ProductID, &item.ProductName, &item.Quantity, &item.UnitPrice); err == nil {
@@ -169,6 +169,13 @@ func (h *HandlerContext) GetAssignedOrders(w http.ResponseWriter, r *http.Reques
 			}
 			itemRows.Close()
 			o.Items = items
+		} else {
+			o.Items = []models.OrderItem{}
+		}
+
+		o.PrintJobs = h.loadPrintJobsForOrder(ctx, o.ID)
+		if o.PrintJobs == nil {
+			o.PrintJobs = []models.PrintJob{}
 		}
 
 		orders = append(orders, o)
@@ -239,6 +246,8 @@ func (h *HandlerContext) MarkDelivered(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "failed to commit transaction")
 		return
 	}
+
+	h.cleanupPrintFilesForOrder(ctx, orderID)
 
 	if h.FCMService != nil {
 		var token sql.NullString
@@ -348,7 +357,7 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	query := `
-		SELECT o.order_number, o.room_number, o.building, o.floor, da.assigned_at, da.delivered_at, da.not_available_flag,
+		SELECT o.id, o.order_number, o.room_number, o.building, o.floor, da.assigned_at, da.delivered_at, da.not_available_flag,
 		       COALESCE(ds.name, ''),
 		       COALESCE(TO_CHAR(ds.delivery_start, 'HH24:MI'), ''),
 		       COALESCE(TO_CHAR(ds.delivery_end, 'HH24:MI'), '')
@@ -367,16 +376,18 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 	defer rows.Close()
 
 	type HistoryRecord struct {
-		OrderNumber       string     `json:"order_number"`
-		RoomNumber        string     `json:"room_number"`
-		Building          string     `json:"building"`
-		Floor             int        `json:"floor"`
-		AssignedAt        time.Time  `json:"assigned_at"`
-		DeliveredAt       *time.Time `json:"delivered_at"`
-		NotAvailableFlag  bool       `json:"not_available_flag"`
-		SlotName          string     `json:"slot_name"`
-		SlotDeliveryStart string     `json:"slot_delivery_start"`
-		SlotDeliveryEnd   string     `json:"slot_delivery_end"`
+		ID                string            `json:"id"`
+		OrderNumber       string            `json:"order_number"`
+		RoomNumber        string            `json:"room_number"`
+		Building          string            `json:"building"`
+		Floor             int               `json:"floor"`
+		AssignedAt        time.Time         `json:"assigned_at"`
+		DeliveredAt       *time.Time        `json:"delivered_at"`
+		NotAvailableFlag  bool              `json:"not_available_flag"`
+		SlotName          string            `json:"slot_name"`
+		SlotDeliveryStart string            `json:"slot_delivery_start"`
+		SlotDeliveryEnd   string            `json:"slot_delivery_end"`
+		PrintJobs         []models.PrintJob `json:"print_jobs,omitempty"`
 	}
 
 	var records []HistoryRecord
@@ -384,6 +395,7 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 		var rec HistoryRecord
 		var delTime sql.NullTime
 		err = rows.Scan(
+			&rec.ID,
 			&rec.OrderNumber,
 			&rec.RoomNumber,
 			&rec.Building,
@@ -399,6 +411,7 @@ func (h *HandlerContext) GetDeliveryHistory(w http.ResponseWriter, r *http.Reque
 			if delTime.Valid {
 				rec.DeliveredAt = &delTime.Time
 			}
+			rec.PrintJobs = h.loadPrintJobsForOrder(ctx, rec.ID)
 			records = append(records, rec)
 		}
 	}

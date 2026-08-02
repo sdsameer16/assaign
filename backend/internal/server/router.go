@@ -32,6 +32,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 			r.Get("/menu", hCtx.GetMenu)
 			r.Get("/cutoff", hCtx.GetCutoffTime)
 			r.Get("/delivery-slots", hCtx.StudentListDeliverySlots)
+			r.Get("/print-pricing", hCtx.GetPrintPricing)
 
 			// Authenticated Student Endpoints
 			r.Group(func(r chi.Router) {
@@ -81,6 +82,8 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Post("/delivery-slots", hCtx.CreateDeliverySlot)
 				r.Put("/delivery-slots/{id}", hCtx.UpdateDeliverySlot)
 				r.Patch("/delivery-slots/{id}/active", hCtx.ToggleDeliverySlotActive)
+				r.Get("/print-pricing", hCtx.GetPrintPricing)
+				r.Put("/print-pricing", hCtx.UpdatePrintPricing)
 				r.Post("/send-notification", hCtx.AdminSendNotification)
 			})
 		})

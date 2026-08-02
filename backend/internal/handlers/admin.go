@@ -557,24 +557,26 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 	defer rows.Close()
 
 	type OrderAdminItem struct {
-		ID                  string    `json:"id"`
-		OrderNumber         string    `json:"order_number"`
-		StudentID           string    `json:"student_id"`
-		StudentName         string    `json:"student_name"`
-		StudentPhone        string    `json:"student_phone"`
-		RoomNumber          string    `json:"room_number"`
-		Building            string    `json:"building"`
-		Floor               int       `json:"floor"`
-		TotalAmount         float64   `json:"total_amount"`
-		Status              string    `json:"status"`
-		CreatedAt           time.Time `json:"created_at"`
-		PaymentStatus       string    `json:"payment_status"`
-		DeliveryPartnerName string    `json:"delivery_partner_name"`
-		NotAvailableFlag    bool      `json:"not_available_flag"`
-		ItemsSummary        string    `json:"items_summary"`
-		SlotName            string    `json:"slot_name"`
-		SlotDeliveryStart   string    `json:"slot_delivery_start"`
-		SlotDeliveryEnd     string    `json:"slot_delivery_end"`
+		ID                  string            `json:"id"`
+		OrderNumber         string            `json:"order_number"`
+		StudentID           string            `json:"student_id"`
+		StudentName         string            `json:"student_name"`
+		StudentPhone        string            `json:"student_phone"`
+		RoomNumber          string            `json:"room_number"`
+		Building            string            `json:"building"`
+		Floor               int               `json:"floor"`
+		TotalAmount         float64           `json:"total_amount"`
+		Status              string            `json:"status"`
+		CreatedAt           time.Time         `json:"created_at"`
+		PaymentStatus       string            `json:"payment_status"`
+		DeliveryPartnerName string            `json:"delivery_partner_name"`
+		NotAvailableFlag    bool              `json:"not_available_flag"`
+		ItemsSummary        string            `json:"items_summary"`
+		PrintJobsSummary    string            `json:"print_jobs_summary"`
+		PrintJobs           []models.PrintJob `json:"print_jobs,omitempty"`
+		SlotName            string            `json:"slot_name"`
+		SlotDeliveryStart   string            `json:"slot_delivery_start"`
+		SlotDeliveryEnd     string            `json:"slot_delivery_end"`
 	}
 
 	var list []OrderAdminItem
@@ -587,6 +589,8 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 			&item.SlotName, &item.SlotDeliveryStart, &item.SlotDeliveryEnd,
 		)
 		if err == nil {
+			item.PrintJobs = h.loadPrintJobsForOrder(ctx, item.ID)
+			item.PrintJobsSummary = printJobsSummary(item.PrintJobs)
 			list = append(list, item)
 		}
 	}
@@ -841,6 +845,8 @@ func (h *HandlerContext) DeliverOrder(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "failed to commit changes")
 		return
 	}
+
+	h.cleanupPrintFilesForOrder(ctx, orderID)
 
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Completed counter handover for order "+orderID, r)
 

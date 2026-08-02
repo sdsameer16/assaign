@@ -1,4 +1,4 @@
-import { Student, Product, Category, Order } from "@campusbites/types";
+import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintSides } from "@campusbites/types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/student";
@@ -107,7 +107,7 @@ export const studentApi = {
   getMenu: () =>
     apiRequest<{ categories: Category[]; products: Product[] }>("/menu"),
 
-  // Place a new order
+  // Place a new order (food and/or print jobs)
   createOrder: (data: {
     room_number: string;
     building: string;
@@ -115,6 +115,15 @@ export const studentApi = {
     special_instructions: string;
     delivery_slot_id: string;
     items: { product_id: string; quantity: number }[];
+    print_jobs?: {
+      file_url: string;
+      file_name: string;
+      file_type: string;
+      color_mode: PrintColorMode;
+      sides: PrintSides;
+      page_count: number;
+      copies: number;
+    }[];
   }) =>
     apiRequest<{
       order_id: string;
@@ -127,6 +136,8 @@ export const studentApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  getPrintPricing: () => apiRequest<PrintPricing>("/print-pricing"),
 
   // Verify payment
   verifyPayment: (data: {

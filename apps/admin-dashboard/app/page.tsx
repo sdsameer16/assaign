@@ -26,6 +26,7 @@ import {
   Loader2,
   Bell,
   MessageSquare,
+  Printer,
 } from "lucide-react";
 import { adminApi, getToken, getProfile, logout, setSession } from "../lib/api";
 
@@ -44,6 +45,7 @@ export default function AdminDashboard() {
     | "overview"
     | "products"
     | "slots"
+    | "print-pricing"
     | "students"
     | "partners"
     | "logs"
@@ -108,6 +110,13 @@ export default function AdminDashboard() {
   const [productUpdating, setProductUpdating] = useState(false);
   const [editProductAvailable, setEditProductAvailable] = useState(true);
   const [cutoffTime, setCutoffTime] = useState("23:59");
+
+  // Print pricing form
+  const [printBwSingle, setPrintBwSingle] = useState("2");
+  const [printBwDouble, setPrintBwDouble] = useState("3");
+  const [printColorSingle, setPrintColorSingle] = useState("8");
+  const [printColorDouble, setPrintColorDouble] = useState("10");
+  const [printPricingSaving, setPrintPricingSaving] = useState(false);
 
   // Partner creation Form
   const [newPartnerName, setNewPartnerName] = useState("");
@@ -199,6 +208,16 @@ export default function AdminDashboard() {
         setDeliverySlots(slotData || []);
       } catch (e) {
         console.error("Failed to load delivery slots:", e);
+      }
+
+      try {
+        const pricing = await adminApi.getPrintPricing();
+        setPrintBwSingle(String(pricing.bw_single));
+        setPrintBwDouble(String(pricing.bw_double));
+        setPrintColorSingle(String(pricing.color_single));
+        setPrintColorDouble(String(pricing.color_double));
+      } catch (e) {
+        console.error("Failed to load print pricing:", e);
       }
 
       const studentData = await adminApi.getStudents();
@@ -402,6 +421,38 @@ export default function AdminDashboard() {
       );
     } catch (err: any) {
       showToast(err.message || "Failed to update slot", "error");
+    }
+  };
+
+  const handleSavePrintPricing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const bw_single = Number(printBwSingle);
+    const bw_double = Number(printBwDouble);
+    const color_single = Number(printColorSingle);
+    const color_double = Number(printColorDouble);
+    if (
+      ![bw_single, bw_double, color_single, color_double].every((n) => n > 0)
+    ) {
+      showToast("All print rates must be greater than zero.", "error");
+      return;
+    }
+    try {
+      setPrintPricingSaving(true);
+      const pricing = await adminApi.updatePrintPricing({
+        bw_single,
+        bw_double,
+        color_single,
+        color_double,
+      });
+      setPrintBwSingle(String(pricing.bw_single));
+      setPrintBwDouble(String(pricing.bw_double));
+      setPrintColorSingle(String(pricing.color_single));
+      setPrintColorDouble(String(pricing.color_double));
+      showToast("Print pricing saved.", "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to save print pricing", "error");
+    } finally {
+      setPrintPricingSaving(false);
     }
   };
 
@@ -643,6 +694,7 @@ export default function AdminDashboard() {
                 { id: "overview", label: "Overview Metrics", icon: TrendingUp },
                 { id: "products", label: "Product Catalog", icon: Layers },
                 { id: "slots", label: "Delivery Slots", icon: Clock },
+                { id: "print-pricing", label: "Print Pricing", icon: Printer },
                 { id: "students", label: "Verification Queue", icon: Users },
                 {
                   id: "partners",
@@ -1391,6 +1443,90 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {activeTab === "print-pricing" && (
+                <div className="space-y-6 max-w-xl">
+                  <div>
+                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                      <Printer className="w-5 h-5 text-indigo-400" />
+                      Print Pricing
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Per-page rates used for student print jobs (locked at checkout).
+                    </p>
+                  </div>
+                  <form
+                    onSubmit={handleSavePrintPricing}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4"
+                  >
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          B&amp;W Single
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={printBwSingle}
+                          onChange={(e) => setPrintBwSingle(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          B&amp;W Double
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={printBwDouble}
+                          onChange={(e) => setPrintBwDouble(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          Color Single
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={printColorSingle}
+                          onChange={(e) => setPrintColorSingle(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          Color Double
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={printColorDouble}
+                          onChange={(e) => setPrintColorDouble(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={printPricingSaving}
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {printPricingSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Save Rates"
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
               {/* Tab 3: OCR Student Approval Queue */}
               {activeTab === "students" && (
                 <div className="space-y-6">
@@ -1621,6 +1757,11 @@ export default function AdminDashboard() {
                             <p className="text-xs text-slate-200 font-extrabold leading-relaxed">
                               {order.items_summary || "No items listed"}
                             </p>
+                            {order.print_jobs_summary && (
+                              <p className="text-[11px] text-amber-300 font-semibold mt-2 leading-relaxed">
+                                {order.print_jobs_summary}
+                              </p>
+                            )}
                           </div>
 
                           {/* Location & Amount */}
@@ -1785,6 +1926,11 @@ export default function AdminDashboard() {
                             <p className="text-xs text-slate-200 font-extrabold leading-relaxed">
                               {order.items_summary || "No items listed"}
                             </p>
+                            {order.print_jobs_summary && (
+                              <p className="text-[11px] text-amber-300 font-semibold mt-2 leading-relaxed">
+                                {order.print_jobs_summary}
+                              </p>
+                            )}
                           </div>
 
                           {/* Previous Location */}

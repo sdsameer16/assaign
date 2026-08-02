@@ -35,6 +35,7 @@ type CreateOrderRequest struct {
 	SpecialInstructions string             `json:"special_instructions"`
 	DeliverySlotID      string             `json:"delivery_slot_id"`
 	Items               []OrderItemRequest `json:"items"`
+	PrintJobs           []PrintJobRequest  `json:"print_jobs"`
 }
 
 type VerifyPaymentRequest struct {
@@ -330,8 +331,8 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if len(req.Items) == 0 {
-		RespondError(w, http.StatusBadRequest, "order must contain at least one item")
+	if len(req.Items) == 0 && len(req.PrintJobs) == 0 {
+		RespondError(w, http.StatusBadRequest, "order must contain at least one food item or print job")
 		return
 	}
 
@@ -416,6 +417,42 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		productDetails[item.ProductID] = ProductInfo{Price: price, Name: name}
 	}
 
+	type computedPrintJob struct {
+		req       PrintJobRequest
+		unitPrice float64
+		lineTotal float64
+	}
+	computedPrintJobs := make([]computedPrintJob, 0, len(req.PrintJobs))
+	if len(req.PrintJobs) > 0 {
+		pricing, pricingErr := h.loadPrintPricing(ctx)
+		if pricingErr != nil {
+			RespondError(w, http.StatusInternalServerError, "print pricing not configured")
+			return
+		}
+		for i, job := range req.PrintJobs {
+			job.ColorMode = strings.ToLower(strings.TrimSpace(job.ColorMode))
+			job.Sides = strings.ToLower(strings.TrimSpace(job.Sides))
+			job.FileType = strings.ToLower(strings.TrimSpace(job.FileType))
+			if err := validatePrintJobRequest(job); err != nil {
+				RespondError(w, http.StatusBadRequest, fmt.Sprintf("print job %d: %s", i+1, err.Error()))
+				return
+			}
+			unitPrice, rateErr := rateForPrintJob(pricing, job.ColorMode, job.Sides)
+			if rateErr != nil {
+				RespondError(w, http.StatusBadRequest, fmt.Sprintf("print job %d: %s", i+1, rateErr.Error()))
+				return
+			}
+			lineTotal := unitPrice * float64(job.PageCount) * float64(job.Copies)
+			totalAmount += lineTotal
+			computedPrintJobs = append(computedPrintJobs, computedPrintJob{req: job, unitPrice: unitPrice, lineTotal: lineTotal})
+		}
+	}
+
+	if totalAmount <= 0 {
+		RespondError(w, http.StatusBadRequest, "order total must be greater than zero")
+		return
+	}
+
 	// Create Razorpay order outside the DB transaction to avoid holding locks during HTTP I/O
 	rzpOrderID, err := h.PaymentService.CreateRazorpayOrder(totalAmount)
 	if err != nil {
@@ -453,6 +490,20 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		_, err = tx.Exec(ctx, insertItem, orderID, item.ProductID, item.Quantity, productDetails[item.ProductID].Price)
 		if err != nil {
 			RespondError(w, http.StatusInternalServerError, "failed to save items")
+			return
+		}
+	}
+
+	for _, job := range computedPrintJobs {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO print_jobs (
+				order_id, file_url, file_name, file_type, color_mode, sides,
+				page_count, copies, unit_price, line_total
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`, orderID, job.req.FileURL, job.req.FileName, job.req.FileType, job.req.ColorMode, job.req.Sides,
+			job.req.PageCount, job.req.Copies, job.unitPrice, job.lineTotal)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "failed to save print jobs")
 			return
 		}
 	}

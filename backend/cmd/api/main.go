@@ -64,11 +64,13 @@ func main() {
 		log.Printf("Firebase FCM Service could not be initialized: %v", fcmErr)
 	}
 
+	cloudinaryService := services.NewCloudinaryService(cfg.CloudinaryCloudName, cfg.CloudinaryAPIKey, cfg.CloudinaryAPISecret)
+
 	// 3.5 Setup Queue System
 	orderQueue := services.NewOrderQueue(10000, db, paymentService)
 	orderQueue.StartWorkers(20)
 
-	hCtx := handlers.NewHandlerContext(db, rdb, authService, ocrService, paymentService, auditService, fcmService, orderQueue)
+	hCtx := handlers.NewHandlerContext(db, rdb, authService, ocrService, paymentService, auditService, fcmService, orderQueue, cloudinaryService)
 
 	customMiddleware.SetAllowedOrigins(cfg.AllowedOrigins)
 
@@ -134,6 +136,29 @@ func runMigrations(db *database.DB) {
 		)`,
 		"ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_slot_id UUID REFERENCES delivery_slots(id) ON DELETE SET NULL",
 		"CREATE INDEX IF NOT EXISTS idx_orders_delivery_slot ON orders(delivery_slot_id)",
+		`CREATE TABLE IF NOT EXISTS print_pricing (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			bw_single DECIMAL(10,2) NOT NULL DEFAULT 2.00,
+			bw_double DECIMAL(10,2) NOT NULL DEFAULT 3.00,
+			color_single DECIMAL(10,2) NOT NULL DEFAULT 8.00,
+			color_double DECIMAL(10,2) NOT NULL DEFAULT 10.00,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS print_jobs (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+			file_url TEXT NOT NULL,
+			file_name VARCHAR(255) NOT NULL,
+			file_type VARCHAR(50) NOT NULL,
+			color_mode VARCHAR(10) NOT NULL CHECK (color_mode IN ('bw', 'color')),
+			sides VARCHAR(10) NOT NULL CHECK (sides IN ('single', 'double')),
+			page_count INT NOT NULL CHECK (page_count > 0),
+			copies INT NOT NULL CHECK (copies > 0),
+			unit_price DECIMAL(10,2) NOT NULL,
+			line_total DECIMAL(10,2) NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)`,
+		"CREATE INDEX IF NOT EXISTS idx_print_jobs_order ON print_jobs(order_id)",
 	}
 	for _, m := range migrations {
 		if _, err := db.Pool.Exec(ctx, m); err != nil {
@@ -212,5 +237,19 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 			}
 		}
 		log.Println("Seeded default food menu categories and products successfully.")
+	}
+
+	// 3. Seed print pricing if empty
+	var pricingCount int
+	err = db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM print_pricing`).Scan(&pricingCount)
+	if err == nil && pricingCount == 0 {
+		_, err = db.Pool.Exec(ctx, `
+			INSERT INTO print_pricing (bw_single, bw_double, color_single, color_double)
+			VALUES (2.00, 3.00, 8.00, 10.00)`)
+		if err != nil {
+			log.Printf("Failed to seed print pricing: %v\n", err)
+		} else {
+			log.Println("Seeded default print pricing rates.")
+		}
 	}
 }
