@@ -12,8 +12,21 @@ import {
   TrackingAd,
 } from "@campusbites/types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/admin";
+const getApiBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/admin";
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    return envUrl
+      .replace("localhost", window.location.hostname)
+      .replace("127.0.0.1", window.location.hostname);
+  }
+  return envUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const getToken = (): string | null => {
   if (typeof window !== "undefined") {

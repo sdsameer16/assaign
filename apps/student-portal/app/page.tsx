@@ -1104,7 +1104,7 @@ export default function StudentPortal() {
             {isLoggedIn && getCartItemCount() > 0 && (
               <button
                 onClick={scrollToOrderPanel}
-                className="relative bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl flex items-center space-x-2 shadow-lg shadow-orange-500/20 active:scale-95 text-white font-bold transition"
+                className="hidden md:flex relative bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl items-center space-x-2 shadow-lg shadow-orange-500/20 active:scale-95 text-white font-bold transition"
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span className="text-sm">{getCartItemCount()}</span>
@@ -2762,77 +2762,96 @@ export default function StudentPortal() {
         )}
       </AnimatePresence>
 
-      {/* Floating Support Helpdesk FAB */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <AnimatePresence>
-          {showSupport && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="absolute bottom-16 right-0 w-72 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 space-y-4 text-slate-800"
-            >
-              <div className="flex items-center space-x-2.5 border-b border-slate-100 pb-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
-                  <Star className="w-5 h-5 animate-spin-slow" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">
-                    Support Helpdesk
-                  </h4>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                    CampusBites Customer Care
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <a
-                  href="mailto:sdsameer1609@gmail.com"
-                  className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-slate-100/50"
-                >
-                  <span className="text-lg">✉️</span>
+      {/* Floating Support Helpdesk FAB & Cart FAB Stack */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col-reverse items-end gap-3">
+        {/* Support FAB - keep current headphones button + popup (unchanged behavior) */}
+        <div className="relative">
+          <AnimatePresence>
+            {showSupport && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute bottom-16 right-0 w-72 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 space-y-4 text-slate-800 z-50"
+              >
+                <div className="flex items-center space-x-2.5 border-b border-slate-100 pb-3">
+                  <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
+                    <Star className="w-5 h-5 animate-spin-slow" />
+                  </div>
                   <div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase block">
-                      Send Email
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 break-all">
-                      sdsameer1609@gmail.com
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      Support Helpdesk
+                    </h4>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                      CampusBites Customer Care
                     </span>
                   </div>
-                </a>
-                <a
-                  href="tel:+917386055404"
-                  className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-slate-100/50"
-                >
-                  <span className="text-lg">📞</span>
-                  <div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase block">
-                      Call Support
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 font-mono">
-                      +91 7386055404
-                    </span>
-                  </div>
-                </a>
-              </div>
-              <p className="text-[9px] text-slate-500 text-center font-medium leading-relaxed">
-                Contact us for any delivery delay or payment query.
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </div>
+                <div className="space-y-3">
+                  <a
+                    href="mailto:sdsameer1609@gmail.com"
+                    className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-slate-100/50"
+                  >
+                    <span className="text-lg">✉️</span>
+                    <div>
+                      <span className="text-[9px] text-slate-500 font-bold uppercase block">
+                        Send Email
+                      </span>
+                      <span className="text-xs font-bold text-slate-800 break-all">
+                        sdsameer1609@gmail.com
+                      </span>
+                    </div>
+                  </a>
+                  <a
+                    href="tel:+917386055404"
+                    className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-slate-100/50"
+                  >
+                    <span className="text-lg">📞</span>
+                    <div>
+                      <span className="text-[9px] text-slate-500 font-bold uppercase block">
+                        Call Support
+                      </span>
+                      <span className="text-xs font-bold text-slate-800 font-mono">
+                        +91 7386055404
+                      </span>
+                    </div>
+                  </a>
+                </div>
+                <p className="text-[9px] text-slate-500 text-center font-medium leading-relaxed">
+                  Contact us for any delivery delay or payment query.
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        <button
-          onClick={() => setShowSupport(!showSupport)}
-          className="w-14 h-14 bg-gradient-to-tr from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-orange-500/30 transition transform hover:scale-105 active:scale-95"
-          title="Customer Care Support"
-        >
-          {showSupport ? (
-            <span className="text-xl font-bold">✕</span>
-          ) : (
-            <Headphones className="w-6 h-6 text-white" />
-          )}
-        </button>
+          <button
+            onClick={() => setShowSupport(!showSupport)}
+            className="w-14 h-14 bg-gradient-to-tr from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-orange-500/30 transition transform hover:scale-105 active:scale-95"
+            title="Customer Care Support"
+          >
+            {showSupport ? (
+              <span className="text-xl font-bold">✕</span>
+            ) : (
+              <Headphones className="w-6 h-6 text-white" />
+            )}
+          </button>
+        </div>
+
+        {/* Cart FAB — render only when isLoggedIn && getCartItemCount() > 0 */}
+        {isLoggedIn && getCartItemCount() > 0 && (
+          <button
+            onClick={scrollToOrderPanel}
+            className="relative w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-orange-500/30 transition transform hover:scale-105 active:scale-95 animate-pulse"
+            title="View Cart & Checkout"
+          >
+            {/* Soft ping ring */}
+            <span className="absolute inset-0 rounded-full bg-orange-500 animate-ping opacity-25" />
+            <ShoppingBag className="w-6 h-6" />
+            <span className="absolute -top-1 -right-1 bg-amber-400 w-5.5 h-5.5 rounded-full border border-white flex items-center justify-center text-[10px] font-black text-slate-900 shadow">
+              {getCartItemCount()}
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );

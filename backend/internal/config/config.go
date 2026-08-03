@@ -102,6 +102,9 @@ func LoadConfig() *Config {
 			"http://127.0.0.1:3001",
 			"http://127.0.0.1:3002",
 		}
+		if !isProd {
+			allowedOrigins = append(allowedOrigins, "*")
+		}
 	}
 
 	cloudinaryCloudName := getEnv("CLOUDINARY_CLOUD_NAME", "")
