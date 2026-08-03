@@ -1025,7 +1025,7 @@ export default function StudentPortal() {
   };
 
   return (
-    <div className="flex-1 bg-[#f8f9fa] text-slate-800 min-h-screen font-sans">
+    <div className="flex-1 bg-[#f8f9fa] text-slate-800 min-h-screen font-sans overflow-x-hidden">
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
@@ -1514,10 +1514,16 @@ export default function StudentPortal() {
                     0% { transform: translateX(0); }
                     100% { transform: translateX(-50%); }
                   }
+                  @-webkit-keyframes conveyor {
+                    0% { -webkit-transform: translateX(0); }
+                    100% { -webkit-transform: translateX(-50%); }
+                  }
                   .animate-conveyor {
+                    -webkit-animation: conveyor 15s linear infinite;
                     animation: conveyor 15s linear infinite;
                     display: inline-flex;
                     width: max-content;
+                    will-change: transform;
                   }
                 `}</style>
                 <div className="absolute top-2 left-3 text-[9px] text-orange-600 font-extrabold uppercase tracking-wider">
