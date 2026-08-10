@@ -124,6 +124,12 @@ func runMigrations(db *database.DB) {
 		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted BOOLEAN DEFAULT FALSE",
 		"ALTER TABLE students ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMP WITH TIME ZONE",
 		"ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'out_of_stock'",
+		"DO $$ BEGIN CREATE TYPE confidence_level AS ENUM ('high', 'medium', 'low'); EXCEPTION WHEN duplicate_object THEN null; END $$;",
+		"ALTER TABLE student_documents ADD COLUMN IF NOT EXISTS ocr_extracted_name VARCHAR(150)",
+		"ALTER TABLE student_documents ADD COLUMN IF NOT EXISTS ocr_extracted_roll_number VARCHAR(50)",
+		"ALTER TABLE student_documents ADD COLUMN IF NOT EXISTS name_similarity_score DECIMAL(5,2)",
+		"ALTER TABLE student_documents ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN DEFAULT FALSE",
+		"ALTER TABLE student_documents ADD COLUMN IF NOT EXISTS confidence_level confidence_level DEFAULT 'low'",
 		`CREATE TABLE IF NOT EXISTS delivery_slots (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name VARCHAR(100) NOT NULL,
@@ -178,22 +184,22 @@ func runMigrations(db *database.DB) {
 func seedDatabase(db *database.DB, authService *services.AuthService) {
 	ctx := context.Background()
 
-	// 1. Seed admin user if 0 exist
-	var adminCount int
-	err := db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM admin_users`).Scan(&adminCount)
-	if err == nil && adminCount == 0 {
-		hash, err := authService.HashPassword("Admin&Ayaz786")
-		if err == nil {
-			_, err = db.Pool.Exec(ctx, `
-				INSERT INTO admin_users (name, email, password_hash, role)
-				VALUES ($1, $2, $3, 'super_admin')`,
-				"System Administrator", "admin@campusbites.com", hash,
-			)
-			if err != nil {
-				log.Printf("Failed to seed default admin: %v\n", err)
-			} else {
-				log.Println("Seeded Default Admin User: admin@campusbites.com / Admin&Ayaz786")
-			}
+	// 1. Ensure admin_users has role column & seed default admin user
+	_, _ = db.Pool.Exec(ctx, `DO $$ BEGIN CREATE TYPE admin_role AS ENUM ('super_admin', 'staff'); EXCEPTION WHEN duplicate_object THEN null; END $$;`)
+	_, _ = db.Pool.Exec(ctx, `ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role admin_role DEFAULT 'super_admin';`)
+
+	hash, err := authService.HashPassword("Admin&Ayaz786")
+	if err == nil {
+		_, err = db.Pool.Exec(ctx, `
+			INSERT INTO admin_users (name, email, password_hash, role)
+			VALUES ($1, $2, $3, 'super_admin')
+			ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role`,
+			"System Administrator", "admin@campusbites.com", hash,
+		)
+		if err != nil {
+			log.Printf("Failed to seed default admin: %v\n", err)
+		} else {
+			log.Println("Seeded/Updated Default Admin User: admin@campusbites.com / Admin&Ayaz786")
 		}
 	}
 
