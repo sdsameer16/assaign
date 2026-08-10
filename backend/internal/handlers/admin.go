@@ -890,20 +890,30 @@ func (h *HandlerContext) DeliverOrder(w http.ResponseWriter, r *http.Request) {
 func parseCutoffTime(cutoffStr string) (int, int, error) {
 	cutoffStr = strings.TrimSpace(cutoffStr)
 
-	// Try 12-hour format "03:04 PM" or "3:04 PM"
-	if strings.Contains(strings.ToUpper(cutoffStr), "AM") || strings.Contains(strings.ToUpper(cutoffStr), "PM") {
-		t, err := time.Parse("03:04 PM", strings.ToUpper(cutoffStr))
+	// Try 12-hour format "03:04 PM" or "3:04 PM" or "3:04PM" or "03:04PM"
+	upper := strings.ToUpper(cutoffStr)
+	if strings.Contains(upper, "AM") || strings.Contains(upper, "PM") {
+		// Normalize spaces before AM/PM
+		upper = strings.ReplaceAll(upper, "AM", " AM")
+		upper = strings.ReplaceAll(upper, "PM", " PM")
+		upper = strings.Join(strings.Fields(upper), " ")
+
+		t, err := time.Parse("03:04 PM", upper)
 		if err == nil {
 			return t.Hour(), t.Minute(), nil
 		}
-		t, err = time.Parse("3:04 PM", strings.ToUpper(cutoffStr))
+		t, err = time.Parse("3:04 PM", upper)
 		if err == nil {
 			return t.Hour(), t.Minute(), nil
 		}
 	}
 
-	// Try 24-hour format "15:04"
+	// Try 24-hour format "15:04" or "3:04"
 	t, err := time.Parse("15:04", cutoffStr)
+	if err == nil {
+		return t.Hour(), t.Minute(), nil
+	}
+	t, err = time.Parse("3:04", cutoffStr)
 	if err == nil {
 		return t.Hour(), t.Minute(), nil
 	}

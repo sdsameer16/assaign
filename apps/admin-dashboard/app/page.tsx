@@ -555,7 +555,10 @@ export default function AdminDashboard() {
     try {
       setDeliveryConfigSaving(true);
       await adminApi.updateDeliveryConfig(fee, minFree);
-      showToast(`Delivery settings saved: Fee ₹${fee}, Free delivery above ₹${minFree}`, "success");
+      if (cutoffTime) {
+        await adminApi.setCutoff(cutoffTime);
+      }
+      showToast(`Delivery settings saved (Fee ₹${fee}, Free delivery above ₹${minFree}, Cutoff ${cutoffTime})`, "success");
     } catch (err: any) {
       showToast("Failed to save delivery config: " + err.message, "error");
     } finally {
@@ -2270,6 +2273,22 @@ export default function AdminDashboard() {
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        Global Daily Order Cutoff Time
+                      </label>
+                      <input
+                        type="text"
+                        value={cutoffTime}
+                        onChange={(e) => setCutoffTime(e.target.value)}
+                        placeholder="e.g. 10:05 AM or 23:59"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 font-mono"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Accepts 12-hour format (e.g. 10:05 AM or 2:30 PM) or 24-hour format (e.g. 23:59). Type 00:01 to pause ordering.
+                      </p>
                     </div>
                     <button
                       type="submit"

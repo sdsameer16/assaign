@@ -244,10 +244,22 @@ export default function StudentPortal() {
   const isGlobalCutoffPassed = useMemo(() => {
     if (!cutoffTime || isCutoff0001(cutoffTime)) return false;
     try {
-      const parts = cutoffTime.split(":");
+      const clean = cutoffTime.trim().toUpperCase();
+      const isPM = clean.includes("PM");
+      const isAM = clean.includes("AM");
+      const timeOnly = clean.replace(/AM|PM/g, "").trim();
+      const parts = timeOnly.split(":");
       if (parts.length >= 2) {
-        const cHour = parseInt(parts[0], 10);
+        let cHour = parseInt(parts[0], 10);
         const cMin = parseInt(parts[1], 10);
+        if (isNaN(cHour) || isNaN(cMin)) return false;
+
+        if (isPM && cHour < 12) {
+          cHour += 12;
+        } else if (isAM && cHour === 12) {
+          cHour = 0;
+        }
+
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         const cutoffMinutes = cHour * 60 + cMin;
