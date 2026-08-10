@@ -925,22 +925,25 @@ func (h *HandlerContext) GetCutoffTime(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cutoff := ""
 
-	// 1. Try Redis cache
-	if h.Redis != nil && h.Redis.Client != nil {
+	// 1. Query persistent PostgreSQL system_config table (Source of Truth)
+	_ = h.DB.Pool.QueryRow(ctx, `SELECT value FROM system_config WHERE key = 'order_cutoff_time'`).Scan(&cutoff)
+
+	// 2. If empty in PostgreSQL, check Redis cache
+	if cutoff == "" && h.Redis != nil && h.Redis.Client != nil {
 		val, err := h.Redis.Client.Get(ctx, "order_cutoff_time").Result()
 		if err == nil && val != "" {
 			cutoff = val
 		}
 	}
 
-	// 2. Try PostgreSQL system_config table
-	if cutoff == "" {
-		_ = h.DB.Pool.QueryRow(ctx, `SELECT value FROM system_config WHERE key = 'order_cutoff_time'`).Scan(&cutoff)
-	}
-
-	// 3. Default fallback if empty
+	// 3. Fallback default if empty
 	if cutoff == "" {
 		cutoff = "10:05 AM"
+	}
+
+	// Sync Redis with the latest PostgreSQL database value
+	if h.Redis != nil && h.Redis.Client != nil {
+		_ = h.Redis.Client.Set(ctx, "order_cutoff_time", cutoff, 0).Err()
 	}
 
 	RespondJSON(w, http.StatusOK, map[string]string{"cutoff_time": cutoff})
