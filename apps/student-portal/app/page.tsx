@@ -2266,118 +2266,114 @@ export default function StudentPortal() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="absolute inset-y-2 right-2 sm:right-4 left-auto w-[min(88vw,360px)] max-w-sm bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden z-50"
+              className="absolute top-[145px] sm:top-[85px] bottom-3 right-2 sm:right-4 left-auto w-[min(88vw,360px)] max-w-sm bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-y-auto scrollbar-thin z-50 p-4 space-y-4"
             >
               {/* Cart Drawer Header */}
-              <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="pb-3 border-b border-slate-800 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <ShoppingBag className="w-5 h-5 text-orange-400" />
-                  <h3 className="text-lg font-extrabold text-white">Your Campus Cart</h3>
+                  <h3 className="text-base font-extrabold text-white">Your Campus Cart</h3>
                   <span className="bg-slate-800 text-slate-300 text-xs font-bold px-2 py-0.5 rounded-full">
                     {getCartItemCount()} items
                   </span>
                 </div>
                 <button
                   onClick={() => setIsCartOpen(false)}
-                  className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition"
+                  className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-
-              {/* Free Delivery Progress Bar */}
-              <div className="bg-slate-950/60 border-b border-slate-800 px-5 py-3 space-y-2">
-                <div className="flex justify-between text-xs font-bold">
-                  {getSubtotal() >= freeDeliveryThreshold ? (
-                    <span className="text-emerald-400">🎉 FREE DELIVERY UNLOCKED!</span>
-                  ) : (
-                    <span className="text-slate-300">
-                      🚚 Add ₹{freeDeliveryThreshold - getSubtotal()} more to unlock FREE DELIVERY
-                    </span>
-                  )}
-                  <span className="text-orange-400">₹{getSubtotal()} / ₹{freeDeliveryThreshold}</span>
-                </div>
-                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, (getSubtotal() / freeDeliveryThreshold) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Saved Address Info inside Cart */}
-              <div className="bg-slate-950/90 border-b border-slate-800 px-5 py-3 text-xs space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-[10px] uppercase font-extrabold tracking-wider flex items-center space-x-1">
-                    <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                    <span>Floor Corridor Delivery Address</span>
-                  </span>
-                  <button
-                    onClick={() => setShowAddressModal(true)}
-                    className="text-orange-400 hover:underline font-bold text-[11px]"
-                  >
-                    Change Address
-                  </button>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-500 text-[10px] block">Block / Building</span>
-                    <span className="font-bold text-white leading-tight block">{building || "Main Campus"}</span>
+                {/* Free Delivery Progress Bar */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    {getSubtotal() >= freeDeliveryThreshold ? (
+                      <span className="text-emerald-400">🎉 FREE DELIVERY UNLOCKED!</span>
+                    ) : (
+                      <span className="text-slate-300">
+                        🚚 Add ₹{freeDeliveryThreshold - getSubtotal()} more to unlock FREE DELIVERY
+                      </span>
+                    )}
+                    <span className="text-orange-400">₹{getSubtotal()} / ₹{freeDeliveryThreshold}</span>
                   </div>
-                  <div>
-                    <span className="text-slate-500 text-[10px] block">Floor & Room</span>
-                    <span className="font-extrabold text-orange-400 leading-tight block">
-                      Floor {floor} • Room {roomNumber || "Not Set"}
-                    </span>
+                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, (getSubtotal() / freeDeliveryThreshold) * 100)}%`,
+                      }}
+                    />
                   </div>
                 </div>
-              </div>
 
-              {/* Delivery Slot Selection */}
-              <div className="bg-slate-950/80 border-b border-slate-800 px-5 py-3">
-                <label className="text-xs font-bold text-slate-300 block mb-2">Select Delivery Slot</label>
-                <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                  {deliverySlots.filter((s) => s.is_active).length > 0 ? (
-                    deliverySlots
-                      .filter((s) => s.is_active)
-                      .map((slot) => {
-                        // Auto-select open slot if selectedSlotId is empty
-                        const openSlot = deliverySlots.find((s) => s.is_ordering_open && s.is_active);
-                        const isSelected = selectedSlotId === slot.id || (!selectedSlotId && openSlot?.id === slot.id);
-                        return (
-                          <button
-                            key={slot.id}
-                            onClick={() => setSelectedSlotId(slot.id)}
-                            disabled={!slot.is_ordering_open}
-                            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${isSelected
-                              ? "bg-orange-500 text-slate-950 border-orange-500"
-                              : slot.is_ordering_open
-                                ? "bg-slate-900 text-slate-300 border-slate-700 hover:border-orange-500/50"
-                                : "bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed"
-                              }`}
-                          >
-                            <div className="flex flex-col items-center space-y-0.5">
-                              <span>{slot.name}</span>
-                              <span className="text-[10px] font-medium opacity-80">
-                                {slot.delivery_start} - {slot.delivery_end}
-                              </span>
-                              <span className="text-[9px] font-medium opacity-70 text-orange-200">
-                                Order before {slot.order_cutoff}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })
-                  ) : (
-                    <span className="text-xs text-slate-500 italic">No delivery slots available today.</span>
-                  )}
+                {/* Saved Address Info inside Cart */}
+                <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[10px] uppercase font-extrabold tracking-wider flex items-center space-x-1">
+                      <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                      <span>Floor Corridor Delivery Address</span>
+                    </span>
+                    <button
+                      onClick={() => setShowAddressModal(true)}
+                      className="text-orange-400 hover:underline font-bold text-[11px]"
+                    >
+                      Change Address
+                    </button>
+                  </div>
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-500 text-[10px] block">Block / Building</span>
+                      <span className="font-bold text-white leading-tight block">{building || "Main Campus"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] block">Floor & Room</span>
+                      <span className="font-extrabold text-orange-400 leading-tight block">
+                        Floor {floor} • Room {roomNumber || "Not Set"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Cart Items List */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* Delivery Slot Selection */}
+                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3">
+                  <label className="text-xs font-bold text-slate-300 block mb-2">Select Delivery Slot</label>
+                  <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    {deliverySlots.filter((s) => s.is_active).length > 0 ? (
+                      deliverySlots
+                        .filter((s) => s.is_active)
+                        .map((slot) => {
+                          // Auto-select open slot if selectedSlotId is empty
+                          const openSlot = deliverySlots.find((s) => s.is_ordering_open && s.is_active);
+                          const isSelected = selectedSlotId === slot.id || (!selectedSlotId && openSlot?.id === slot.id);
+                          return (
+                            <button
+                              key={slot.id}
+                              onClick={() => setSelectedSlotId(slot.id)}
+                              disabled={!slot.is_ordering_open}
+                              className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${isSelected
+                                ? "bg-orange-500 text-slate-950 border-orange-500"
+                                : slot.is_ordering_open
+                                  ? "bg-slate-900 text-slate-300 border-slate-700 hover:border-orange-500/50"
+                                  : "bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed"
+                                }`}
+                            >
+                              <div className="flex flex-col items-center space-y-0.5">
+                                <span>{slot.name}</span>
+                                <span className="text-[10px] font-medium opacity-80">
+                                  {slot.delivery_start} - {slot.delivery_end}
+                                </span>
+                                <span className="text-[9px] font-medium opacity-70 text-orange-200">
+                                  Order before {slot.order_cutoff}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                    ) : (
+                      <span className="text-xs text-slate-500 italic">No delivery slots available today.</span>
+                    )}
+                  </div>
+                </div>
                 {getCartItemCount() === 0 ? (
                   <div className="text-center py-12 space-y-4">
                     <ShoppingBasket className="w-12 h-12 text-slate-700 mx-auto" />
@@ -2472,7 +2468,6 @@ export default function StudentPortal() {
                     </div>
                   </>
                 )}
-              </div>
 
               {/* Cart Drawer Footer & Checkout */}
               {getCartItemCount() > 0 && (
