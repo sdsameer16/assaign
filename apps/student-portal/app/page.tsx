@@ -197,6 +197,7 @@ export default function StudentPortal() {
   const [trackingMinimized, setTrackingMinimized] = useState(false);
   const [showMenuExplorer, setShowMenuExplorer] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showAccountDrawer, setShowAccountDrawer] = useState(false);
   const [ratingModalOrderID, setRatingModalOrderID] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
@@ -290,6 +291,28 @@ export default function StudentPortal() {
   const menuSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Load session, stored location, menu & cart on initialization
+  // Lock background page scroll completely on mobile touch devices when cart or modal is open
+  useEffect(() => {
+    if (isCartOpen || showAddressModal || showHistoryModal || showAccountDrawer || showPrintingsModal) {
+      const scrollY = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        const savedY = Math.abs(parseInt(document.body.style.top || "0", 10));
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+        window.scrollTo(0, savedY);
+      };
+    }
+  }, [isCartOpen, showAddressModal, showHistoryModal, showAccountDrawer, showPrintingsModal]);
+
   useEffect(() => {
     const savedToken = getToken();
     const savedProfile = getProfile();
@@ -1368,8 +1391,11 @@ export default function StudentPortal() {
     <div className={`min-h-screen font-sans pb-24 transition-colors duration-300 ${theme === "dark" ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <Script src="https://checkout.razorpay.com/v1/checkout.js" />
 
-      {/* Header & Sticky Top Bar */}
-      <header className={`sticky top-0 z-40 backdrop-blur-md border-b shadow-lg transition-colors duration-300 ${theme === "dark" ? "bg-slate-900/90 border-slate-800" : "bg-white/90 border-slate-200"}`}>
+      {/* Header & Fixed Top Bar */}
+      <header
+        style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999 }}
+        className={`border-b shadow-md transition-colors duration-300 ${theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200 text-slate-900"}`}
+      >
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
 
           {/* Logo & Platform Tagline */}
@@ -1390,83 +1416,61 @@ export default function StudentPortal() {
             </div>
           </div>
 
-          {/* Delivery Location Pill & Cart Control */}
-          <div className="flex items-center space-x-2.5">
+          {/* Header Top Bar Controls */}
+          <div className="flex items-center space-x-2">
             {/* Delivery Location Indicator */}
             <button
               onClick={() => setShowAddressModal(true)}
-              className={`border rounded-xl px-3 py-1.5 text-xs flex items-center space-x-2 transition ${theme === "dark"
+              className={`border rounded-xl px-2.5 py-1.5 text-xs flex items-center space-x-1.5 transition ${theme === "dark"
                 ? "bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-200"
                 : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-900 shadow-sm"
                 }`}
             >
               <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-              <div className="text-left hidden md:block">
-                <span className={`text-[10px] block leading-none ${theme === "dark" ? "text-slate-400" : "text-slate-500 font-semibold"}`}>
-                  Delivering to
-                </span>
-                <span className={`font-bold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>
-                  {building}, Fl {floor} • {roomNumber || "Add Room"}
-                </span>
-              </div>
-              <span className={`font-bold md:hidden ${theme === "dark" ? "text-slate-200" : "text-slate-900"}`}>
+              <span className={`font-bold text-xs truncate max-w-[110px] sm:max-w-none ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>
                 {roomNumber ? `${building} R-${roomNumber}` : "Set Location"}
               </span>
             </button>
 
+            {/* Desktop-only action buttons */}
+            <div className="hidden sm:flex items-center space-x-2">
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="relative bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-orange-500/20 transition active:scale-95"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>₹{getSubtotal()}</span>
+                {getCartItemCount() > 0 && (
+                  <span className="bg-slate-950 text-orange-400 font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">
+                    {getCartItemCount()}
+                  </span>
+                )}
+              </button>
 
-            {/* Header Cart Badge Button */}
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-orange-500/20 transition active:scale-95"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>₹{getSubtotal()}</span>
-              {getCartItemCount() > 0 && (
-                <span className="bg-slate-950 text-orange-400 font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">
-                  {getCartItemCount()}
-                </span>
+              {isLoggedIn && (
+                <>
+                  <button
+                    onClick={() => {
+                      fetchOrderHistory();
+                      setShowHistoryModal(true);
+                    }}
+                    title="My Orders & Reviews"
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5"
+                  >
+                    <Clock className="w-4 h-4 text-orange-400" />
+                    <span>My Orders</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPrintingsModal(true)}
+                    title="Printings"
+                    className="bg-orange-500 hover:bg-orange-600 text-slate-950 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-md shadow-orange-500/20"
+                  >
+                    <AnimatedPrinterIcon className="w-4 h-4" />
+                    <span>Printings</span>
+                  </button>
+                </>
               )}
-            </button>
-
-            {/* Order History & Ratings Button */}
-            {isLoggedIn && (
-              <>
-                <button
-                  onClick={() => {
-                    fetchOrderHistory();
-                    setShowHistoryModal(true);
-                  }}
-                  title="My Orders & Reviews"
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5"
-                >
-                  <Clock className="w-4 h-4 text-orange-400" />
-                  <span className="hidden sm:inline">My Orders</span>
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedTrackingID) {
-                      setTrackingMinimized(false);
-                    } else {
-                      alert("You don't have any active orders right now. Check 'My Orders' to see past orders!");
-                    }
-                  }}
-                  title="Live Tracking"
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5"
-                >
-                  <Flame className="w-4 h-4 text-orange-400 animate-pulse" />
-                  <span className="hidden sm:inline">Live</span>
-                </button>
-                <button
-                  onClick={() => setShowPrintingsModal(true)}
-                  title="Printings"
-                  className="bg-orange-500 hover:bg-orange-600 text-slate-950 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-md shadow-orange-500/20"
-                >
-                  <AnimatedPrinterIcon className="w-4 h-4" />
-                  <span className="hidden sm:inline">Printings</span>
-                </button>
-              </>
-            )}
+            </div>
 
             {/* Light / Dark Theme Toggle Button */}
             <button
@@ -1481,15 +1485,14 @@ export default function StudentPortal() {
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-
-            {/* Profile / Logout */}
+            {/* Profile / Account Trigger */}
             {isLoggedIn ? (
               <button
-                onClick={handleLogout}
-                title="Logout"
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl transition"
+                onClick={() => setShowAccountDrawer(true)}
+                title="Account Menu"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl transition flex items-center space-x-1"
               >
-                <LogOut className="w-4 h-4" />
+                <User className="w-4 h-4 text-orange-400" />
               </button>
             ) : (
               <button
@@ -1500,12 +1503,87 @@ export default function StudentPortal() {
               </button>
             )}
           </div>
+        </div>
 
+        {/* Mobile Primary Navigation Bar (2-Row Layout Directly Below Title for < sm screens) */}
+        <div className={`sm:hidden border-t px-3 py-2 space-y-1.5 transition-colors duration-300 ${theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
+              onClick={scrollToMenu}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span>Home</span>
+            </button>
+
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center space-x-1 shadow-md transition active:scale-95"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+              <span>Cart ({getCartItemCount()})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (isLoggedIn) {
+                  fetchOrderHistory();
+                  setShowHistoryModal(true);
+                } else {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span>Orders</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => setShowPrintingsModal(true)}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <AnimatedPrinterIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span>Printings</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (isLoggedIn) {
+                  setShowAccountDrawer(true);
+                } else {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <User className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span className="truncate">{isLoggedIn ? (profile?.short_name || "Account") : "Login"}</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Hero & Food Positioning Banner */}
-      <section className={`relative overflow-hidden border-b px-4 py-8 md:py-12 transition-colors duration-300 ${theme === "dark"
+      <section className={`relative overflow-hidden border-b px-4 pt-[140px] sm:pt-[84px] pb-8 md:pb-12 transition-colors duration-300 ${theme === "dark"
         ? "bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-slate-800/80"
         : "bg-gradient-to-b from-orange-50/80 via-white to-slate-50 border-slate-200"
         }`}>
@@ -2178,7 +2256,8 @@ export default function StudentPortal() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsCartOpen(false)}
-              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+              onTouchMove={(e) => e.preventDefault()}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm touch-none"
             />
 
             {/* Cart Drawer Panel */}
@@ -2187,7 +2266,7 @@ export default function StudentPortal() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="absolute inset-y-0 right-0 max-w-md w-full bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col justify-between"
+              className="absolute inset-y-2 right-2 sm:right-4 left-auto w-[min(88vw,360px)] max-w-sm bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden z-50"
             >
               {/* Cart Drawer Header */}
               <div className="p-5 border-b border-slate-800 flex items-center justify-between">
@@ -2672,6 +2751,7 @@ export default function StudentPortal() {
                         <span className="bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
                           {ord.status.replace(/_/g, " ")}
                         </span>
+                      </div>
                       {/* Structured Delivery Location Card */}
                       <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5 text-xs space-y-1">
                         <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase tracking-wider">
@@ -2796,8 +2876,106 @@ export default function StudentPortal() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Secondary Actions Account Drawer Modal */}
+      <AnimatePresence>
+        {showAccountDrawer && (
+          <div className="fixed inset-0 z-50 overflow-hidden flex items-end sm:items-center justify-center p-2 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAccountDrawer(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ y: 50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 50, opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 z-10"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center font-bold">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">{profile?.short_name || "Student Profile"}</h4>
+                    <p className="text-[11px] text-slate-400">{profile?.mobile_number || "CampusBites Account"}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAccountDrawer(false)}
+                  className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    setShowAccountDrawer(false);
+                    if (selectedTrackingID) {
+                      setTrackingMinimized(false);
+                    } else {
+                      alert("No active delivery tracking right now. Place an order to track in real-time!");
+                    }
+                  }}
+                  className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Flame className="w-4 h-4 text-orange-400 animate-pulse" />
+                    <span>Live Order Tracking</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowAccountDrawer(false);
+                    toggleTheme();
+                  }}
+                  className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    {theme === "dark" ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-amber-600" />}
+                    <span>Theme ({theme === "dark" ? "Dark Mode" : "Light Mode"})</span>
+                  </div>
+                  <span className="text-[10px] text-orange-400 font-bold uppercase">Toggle</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowAccountDrawer(false);
+                    alert("Support & Helpdesk: Contact CampusBites Canteen Desk at +91 7386055401");
+                  }}
+                  className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Headphones className="w-4 h-4 text-orange-400" />
+                    <span>Help & Canteen Support</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowAccountDrawer(false);
+                    handleLogout();
+                  }}
+                  className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 p-3 rounded-2xl text-xs font-bold flex items-center justify-center space-x-2 transition mt-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Logout Account</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       {/* Support Helpdesk FAB */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end space-y-4">
+      <div className={`fixed bottom-6 z-50 flex flex-col space-y-4 transition-all duration-300 ${isCartOpen ? "left-6 items-start" : "right-6 items-end"}`}>
         <AnimatePresence>
           {showSupport && (
             <motion.div
