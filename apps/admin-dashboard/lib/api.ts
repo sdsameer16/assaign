@@ -58,13 +58,14 @@ async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const token = getToken();
+  const baseUrl = getApiBaseUrl();
   const headers = {
     "Content-Type": "application/json",
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     ...options,
     headers,
   });

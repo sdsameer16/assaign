@@ -152,7 +152,7 @@ export default function AdminDashboard() {
   const [editProductImage, setEditProductImage] = useState("");
   const [productUpdating, setProductUpdating] = useState(false);
   const [editProductAvailable, setEditProductAvailable] = useState(true);
-  const [cutoffTime, setCutoffTime] = useState("23:59");
+  const [cutoffTime, setCutoffTime] = useState("");
 
   // Print pricing form
   const [printBwSingle, setPrintBwSingle] = useState("2");
@@ -242,6 +242,11 @@ export default function AdminDashboard() {
       interval = setInterval(() => {
         fetchSummary();
         fetchOrders();
+        adminApi.getCutoff().then(data => {
+          if (data && data.cutoff_time) {
+            setCutoffTime(data.cutoff_time);
+          }
+        }).catch(() => {});
       }, 8000);
     }
     return () => clearInterval(interval);
