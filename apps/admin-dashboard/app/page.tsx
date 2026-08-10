@@ -1168,7 +1168,11 @@ export default function AdminDashboard() {
                 )}
               </button>
             </form>
-          </motion.div>      {/* Main Console Layout */}
+          </motion.div>
+        </div>
+      )}
+
+      {/* Main Console Layout */}
       {isLoggedIn && profile && (
         <div className="flex-1 flex flex-col md:flex-row min-h-screen max-w-full overflow-x-hidden">
           {/* Mobile Navigation Header */}
