@@ -288,3 +288,51 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.8);
 }
+
+/* Animated Food Conveyor Belt */
+.conveyor-belt-track {
+  background: repeating-linear-gradient(
+    90deg,
+    #1e293b 0px,
+    #1e293b 20px,
+    #0f172a 20px,
+    #0f172a 40px
+  );
+  background-size: 80px 100%;
+  animation: conveyor-slide 1.2s linear infinite;
+}
+
+.conveyor-belt-track-light {
+  background: repeating-linear-gradient(
+    90deg,
+    #e2e8f0 0px,
+    #e2e8f0 20px,
+    #cbd5e1 20px,
+    #cbd5e1 40px
+  );
+  background-size: 80px 100%;
+  animation: conveyor-slide 1.2s linear infinite;
+}
+
+@keyframes conveyor-slide {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 80px 0;
+  }
+}
+
+.conveyor-roller {
+  animation: roller-spin 1.8s linear infinite;
+}
+
+@keyframes roller-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+

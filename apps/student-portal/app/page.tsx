@@ -130,6 +130,136 @@ type PrintDraftFile = {
   source: PageCountSource;
 };
 
+const getVerificationCode = (orderNumber: string) => {
+  if (!orderNumber) return "CB-58926";
+  const parts = orderNumber.split("-");
+  if (parts.length >= 2 && parts[1]) {
+    return `CB-${parts[1]}`;
+  }
+  return orderNumber.startsWith("CB-") ? orderNumber : `CB-${orderNumber}`;
+};
+
+const StudentVerificationCodeCard = ({
+  orderNumber,
+  theme = "dark",
+}: {
+  orderNumber: string;
+  theme?: string;
+}) => {
+  return (
+    <div
+      className={`space-y-2.5 p-4 border rounded-2xl transition-colors ${
+        theme === "dark"
+          ? "bg-slate-950/60 border-slate-800 text-slate-100"
+          : "bg-slate-50 border-slate-300 text-slate-900"
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <label
+          className={`text-[10px] font-black uppercase tracking-wider block ${
+            theme === "dark" ? "text-slate-400" : "text-slate-600"
+          }`}
+        >
+          STUDENT VERIFICATION CODE
+        </label>
+        <span
+          className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded animate-pulse ${
+            theme === "dark"
+              ? "bg-indigo-950/60 text-indigo-400 border border-indigo-800/40"
+              : "bg-indigo-100 text-indigo-800 border border-indigo-200"
+          }`}
+        >
+          SECURITY CODE CHECK
+        </span>
+      </div>
+      <div
+        className={`w-full border rounded-xl px-4 py-3.5 text-center font-mono font-black text-2xl tracking-widest uppercase shadow-inner flex items-center justify-center transition-colors ${
+          theme === "dark"
+            ? "bg-slate-950 border-slate-800 text-white"
+            : "bg-white border-slate-300 text-slate-900"
+        }`}
+      >
+        {getVerificationCode(orderNumber)}
+      </div>
+      <p
+        className={`text-[11px] text-center px-4 leading-relaxed font-medium ${
+          theme === "dark" ? "text-slate-400" : "text-slate-600"
+        }`}
+      >
+        Visually verify this code with the student&apos;s screen before handing over the package.
+      </p>
+    </div>
+  );
+};
+
+const FoodConveyorBelt = ({
+  status,
+  theme = "dark",
+  isEnlarged = false,
+}: {
+  status: string;
+  theme?: string;
+  isEnlarged?: boolean;
+}) => {
+  const statusLabels: Record<string, string> = {
+    received: "Order Received & Queued 📋",
+    preparing: "Chef Cooking in Kitchen 🍳",
+    packed: "Sealed & Quality Inspected 📦",
+    assigned: "Dispatched to Floor Partner 🛵",
+    out_for_delivery: "Out for Corridor Delivery 🚀",
+    delivered: "Delivered to Room! Enjoy 😋",
+  };
+
+  const currentLabel = statusLabels[status] || "Order Processing";
+
+  const foodIcons = ["🍔", "🍱", "🍕", "🥤", "🍟", "📦", "🍦", "☕", "🍔", "🍱", "🍕", "🥤", "🍟", "📦", "🍦", "☕"];
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl border transition-colors ${
+        theme === "dark"
+          ? "bg-slate-950/80 border-slate-800 text-slate-100"
+          : "bg-slate-50 border-slate-300 text-slate-900"
+      } ${isEnlarged ? "p-5" : "p-4"}`}
+    >
+      {/* Header status indicator */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+          </span>
+          <span className="text-xs font-black uppercase tracking-wider text-orange-500">
+            {currentLabel}
+          </span>
+        </div>
+        <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-orange-500/10 text-orange-500 border border-orange-500/30">
+          ⚡ Live Status
+        </span>
+      </div>
+
+      {/* Floating Pure Food Icons Stream */}
+      <div className="relative h-14 w-full overflow-hidden flex items-center">
+        <motion.div
+          className="flex items-center space-x-8 whitespace-nowrap"
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{
+            duration: status === "preparing" ? 5 : status === "out_for_delivery" ? 3.5 : 7,
+            repeat: Infinity,
+            ease: "linear",
+          }}
+        >
+          {foodIcons.map((icon, index) => (
+            <span key={index} className="text-3xl shrink-0 select-none">
+              {icon}
+            </span>
+          ))}
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
 export default function StudentPortal() {
   // Authentication & Profile states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -195,6 +325,101 @@ export default function StudentPortal() {
   const [trackingDetails, setTrackingDetails] = useState<any>(null);
   const [trackingAd, setTrackingAd] = useState<TrackingAd | null>(null);
   const [trackingMinimized, setTrackingMinimized] = useState(false);
+  const [dismissedBannerIDs, setDismissedBannerIDs] = useState<string[]>([]);
+  const [enlargedTrackingOrderID, setEnlargedTrackingOrderID] = useState<string | null>(null);
+  const [enlargedTrackingDetails, setEnlargedTrackingDetails] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("dismissed_tracking_banner_ids");
+      if (raw) {
+        try {
+          setDismissedBannerIDs(JSON.parse(raw));
+        } catch (e) {}
+      }
+    }
+  }, []);
+
+  const handleDismissBanner = (orderID: string) => {
+    const updated = [...dismissedBannerIDs, orderID];
+    setDismissedBannerIDs(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dismissed_tracking_banner_ids", JSON.stringify(updated));
+    }
+  };
+
+  const handleOpenActiveOrders = async () => {
+    try {
+      const history = await studentApi.getHistory();
+      setOrderHistory(history);
+      const activeOrd = history.find(
+        (o: any) => o.status !== "delivered" && o.status !== "cancelled" && o.status !== "out_of_stock"
+      );
+      if (activeOrd) {
+        setDismissedBannerIDs((prev) => {
+          const updated = prev.filter((id) => id !== activeOrd.id);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("dismissed_tracking_banner_ids", JSON.stringify(updated));
+          }
+          return updated;
+        });
+        setSelectedTrackingID(activeOrd.id);
+        setActiveOrderIDs((prev) => Array.from(new Set([...prev, activeOrd.id])));
+        setShowHistoryModal(false);
+        setEnlargedTrackingOrderID(null);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        setShowHistoryModal(true);
+      }
+    } catch (e) {
+      fetchOrderHistory();
+      setShowHistoryModal(true);
+    }
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (enlargedTrackingOrderID) {
+      const fetchEnlarged = async () => {
+        try {
+          const res = await studentApi.trackOrder(enlargedTrackingOrderID);
+          setEnlargedTrackingDetails(res);
+        } catch (e) {
+          console.error("Enlarged tracking error:", e);
+        }
+      };
+      fetchEnlarged();
+      interval = setInterval(fetchEnlarged, 4000);
+    } else {
+      setEnlargedTrackingDetails(null);
+    }
+    return () => clearInterval(interval);
+  }, [enlargedTrackingOrderID]);
+
+  // Auto-scroll to top & focus live delivery tracker upon order placement/selection
+  useEffect(() => {
+    if (selectedTrackingID && typeof window !== "undefined") {
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        const trackerEl = document.getElementById("live-delivery-tracker");
+        if (trackerEl) {
+          trackerEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 150);
+    }
+  }, [selectedTrackingID]);
+
+  const hasActiveTracker = useMemo(() => {
+    return (
+      activeOrderIDs.length > 0 &&
+      selectedTrackingID !== null &&
+      trackingDetails !== null &&
+      !dismissedBannerIDs.includes(selectedTrackingID) &&
+      trackingDetails?.order?.status !== "delivered" &&
+      trackingDetails?.order?.status !== "cancelled" &&
+      trackingDetails?.order?.status !== "out_of_stock"
+    );
+  }, [activeOrderIDs, selectedTrackingID, trackingDetails, dismissedBannerIDs]);
   const [showMenuExplorer, setShowMenuExplorer] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showAccountDrawer, setShowAccountDrawer] = useState(false);
@@ -1331,7 +1556,19 @@ export default function StudentPortal() {
         print_jobs: printJobsPayload,
       });
 
+      // Reset & empty cart immediately upon successful order placement
+      setCart({});
+      setPrintJobs([]);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("campusbites_cart_cache");
+        localStorage.removeItem("campusbites_guest_cart");
+      }
+      syncCartState({}, isLoggedIn);
+
+      setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
+      setSelectedTrackingID(orderData.order_id);
       setIsCartOpen(false);
+      fetchOrderHistory();
 
       if ((window as any).Razorpay && process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
         const options = {
@@ -1349,13 +1586,6 @@ export default function StudentPortal() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
               });
-              setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
-              setSelectedTrackingID(orderData.order_id);
-              setCart({});
-              setPrintJobs([]);
-              if (typeof window !== "undefined") {
-                localStorage.removeItem("campusbites_cart_cache");
-              }
               fetchOrderHistory();
             } catch (e: any) {
               alert("Payment verification failed: " + e.message);
@@ -1371,7 +1601,7 @@ export default function StudentPortal() {
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } else {
-        alert("Razorpay payment gateway is missing. Please ensure NEXT_PUBLIC_RAZORPAY_KEY_ID is configured in your environment.");
+        alert("Order created successfully! Multi-order tracker live.");
       }
     } catch (err: any) {
       alert("Failed to place order: " + err.message);
@@ -1409,6 +1639,324 @@ export default function StudentPortal() {
                   Campus Bites
                 </span>
                 {/*  */}
+              </div>
+              <p className={`text-[11px] hidden sm:block font-medium ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
+                Everything You Crave, Delivered to Your Floor
+              </p>
+            </div>
+          </div>
+
+          {/* Header Top Bar Controls */}
+          <div className="flex items-center space-x-2">
+            {/* Delivery Location Indicator */}
+            <button
+              onClick={() => setShowAddressModal(true)}
+              className={`border rounded-xl px-2.5 py-1.5 text-xs flex items-center space-x-1.5 transition ${theme === "dark"
+                ? "bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-200"
+                : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-900 shadow-sm"
+                }`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span className={`font-bold text-xs truncate max-w-[110px] sm:max-w-none ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>
+                {roomNumber ? `${building} R-${roomNumber}` : "Set Location"}
+              </span>
+            </button>
+
+            {/* Desktop-only action buttons */}
+            <div className="hidden sm:flex items-center space-x-2">
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="relative bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-orange-500/20 transition active:scale-95"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>₹{getSubtotal()}</span>
+                {getCartItemCount() > 0 && (
+                  <span className="bg-slate-950 text-orange-400 font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">
+                    {getCartItemCount()}
+                  </span>
+                )}
+              </button>
+
+              {isLoggedIn && (
+                <>
+                  <button
+                    onClick={handleOpenActiveOrders}
+                    title="My Orders & Active Tracking"
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5"
+                  >
+                    <Clock className="w-4 h-4 text-orange-400" />
+                    <span>My Orders</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPrintingsModal(true)}
+                    title="Printings"
+                    className="bg-orange-500 hover:bg-orange-600 text-slate-950 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-md shadow-orange-500/20"
+                  >
+                    <AnimatedPrinterIcon className="w-4 h-4" />
+                    <span>Printings</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Light / Dark Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme"}
+              className={
+                theme === "dark"
+                  ? "bg-slate-800 hover:bg-slate-700 text-amber-400 p-2 rounded-xl transition"
+                  : "bg-slate-200 hover:bg-slate-300 text-amber-600 p-2 rounded-xl transition border border-slate-300"
+              }
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            {/* Profile / Account Trigger */}
+            {isLoggedIn ? (
+              <button
+                onClick={() => setShowAccountDrawer(true)}
+                title="Account Menu"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl transition flex items-center space-x-1"
+              >
+                <User className="w-4 h-4 text-orange-400" />
+              </button>
+            ) : (
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition"
+              >
+                Login
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Primary Navigation Bar (2-Row Layout Directly Below Title for < sm screens) */}
+        <div className={`sm:hidden border-t px-3 py-2 space-y-1.5 transition-colors duration-300 ${theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
+              onClick={scrollToMenu}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span>Home</span>
+            </button>
+
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center space-x-1 shadow-md transition active:scale-95"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+              <span>Cart ({getCartItemCount()})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (isLoggedIn) {
+                  handleOpenActiveOrders();
+                } else {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span>Orders</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => setShowPrintingsModal(true)}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <AnimatedPrinterIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span>Printings</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (isLoggedIn) {
+                  setShowAccountDrawer(true);
+                } else {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 border transition active:scale-95 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-white border-slate-300 text-slate-900 shadow-sm"
+              }`}
+            >
+              <User className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span className="truncate">{isLoggedIn ? (profile?.short_name || "Account") : "Login"}</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* PROMINENT TOP ACTIVE ORDER TRACKER BANNER (DISPLAYED ABOVE HEADER FOR EASY CROSS (X) ICON NAVIGATION) */}
+      {hasActiveTracker && (
+        <section id="live-delivery-tracker" className="relative z-[10000] pt-3 px-3 sm:px-4 max-w-5xl mx-auto">
+          <div className={`border rounded-3xl p-4 sm:p-6 shadow-2xl space-y-5 transition-colors ${
+            theme === "dark"
+              ? "bg-slate-900 border-slate-800 text-slate-100"
+              : "bg-white border-slate-200 text-slate-900 shadow-xl"
+          }`}>
+            {/* Multi-Order Tabs */}
+            {activeOrderIDs.length > 1 && (
+              <div className="flex items-center space-x-2 border-b border-slate-800/60 pb-3 overflow-x-auto">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex-shrink-0">
+                  Active Orders ({activeOrderIDs.length}):
+                </span>
+                {activeOrderIDs.map((id, index) => {
+                  const isSel = id === selectedTrackingID;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setSelectedTrackingID(id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 flex-shrink-0 ${isSel
+                        ? "bg-orange-500 text-slate-950 shadow-md shadow-orange-500/20"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-750"
+                        }`}
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Order #{index + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+              <div>
+                <span className="text-[10px] font-black uppercase text-orange-500 tracking-wider block">
+                  🚀 Live Campus Delivery Tracker
+                </span>
+                <h3 className="text-lg sm:text-xl font-black">
+                  Order #{trackingDetails.order.order_number}
+                </h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="bg-orange-500/20 text-orange-500 border border-orange-500/30 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full uppercase">
+                  {trackingDetails.order.status.replace(/_/g, " ")}
+                </span>
+                <button
+                  onClick={() => selectedTrackingID && handleDismissBanner(selectedTrackingID)}
+                  title="Dismiss Banner (Re-open anytime in My Orders)"
+                  className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition border border-slate-700/60 shadow-sm"
+                >
+                  <X className="w-6 h-6 text-orange-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* 1. Live Food Conveyor Belt Animation */}
+            <FoodConveyorBelt status={trackingDetails.order.status} theme={theme} />
+
+            {/* 2. Student Delivery Verification Code Box */}
+            <StudentVerificationCodeCard
+              orderNumber={trackingDetails.order.order_number}
+              theme={theme}
+            />
+
+            {/* 3. Promotional Campus Offer / Ad Banner */}
+            {trackingAd?.is_enabled && trackingAd?.image_url && (
+              <div className={`border rounded-2xl overflow-hidden p-3 sm:p-4 space-y-2.5 transition-colors ${
+                theme === "dark"
+                  ? "bg-slate-950/80 border-indigo-500/40 text-slate-100"
+                  : "bg-slate-50 border-indigo-200 text-slate-900 shadow-md"
+              }`}>
+                <span className="text-[10px] sm:text-[11px] font-black text-indigo-500 uppercase tracking-wider block">
+                  📢 Campus Special Offer & Announcement
+                </span>
+                <img
+                  src={trackingAd.image_url}
+                  alt="Campus Ad"
+                  className="w-full max-h-[350px] rounded-xl border border-slate-700/60 shadow-lg object-contain"
+                />
+              </div>
+            )}
+
+            {/* 4. Step-by-Step Timeline & Delivery Destination */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              {[
+                { label: "Confirmed", active: true },
+                {
+                  label: "Preparing",
+                  active: ["preparing", "packed", "assigned", "out_for_delivery", "delivered"].includes(
+                    trackingDetails.order.status
+                  ),
+                },
+                {
+                  label: "Out for Delivery",
+                  active: ["out_for_delivery", "delivered"].includes(trackingDetails.order.status),
+                },
+                {
+                  label: "Delivered",
+                  active: trackingDetails.order.status === "delivered",
+                },
+              ].map((step, idx) => (
+                <div
+                  key={idx}
+                  className={`p-2.5 rounded-xl border text-[11px] sm:text-xs font-bold ${step.active
+                    ? "bg-orange-500/15 border-orange-500/40 text-orange-500"
+                    : "bg-slate-950/50 border-slate-800 text-slate-500"
+                    }`}
+                >
+                  {step.label}
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5 text-xs text-slate-400 space-y-1">
+              <div>
+                Delivering to: <span className="text-white font-bold">{trackingDetails.order.building}, Floor {trackingDetails.order.floor}, Room {trackingDetails.order.room_number}</span>
+              </div>
+              <div>Estimated Delivery: <span className="text-orange-400 font-bold">15–20 mins</span></div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Header & Fixed/Sticky Top Bar */}
+      <header
+        style={{
+          position: hasActiveTracker ? "sticky" : "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
+        }}
+        className={`border-b shadow-md transition-colors duration-300 ${
+          theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200 text-slate-900"
+        }`}
+      >
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+
+          {/* Logo & Platform Tagline */}
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 dark:border-slate-800 flex items-center justify-center shadow-md shadow-orange-500/20 overflow-hidden">
+              <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <span className={`font-extrabold text-lg tracking-tight ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                  Campus Bites
+                </span>
               </div>
               <p className={`text-[11px] hidden sm:block font-medium ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
                 Everything You Crave, Delivered to Your Floor
@@ -1583,10 +2131,15 @@ export default function StudentPortal() {
       </header>
 
       {/* Main Hero & Food Positioning Banner */}
-      <section className={`relative overflow-hidden border-b px-4 pt-[140px] sm:pt-[84px] pb-8 md:pb-12 transition-colors duration-300 ${theme === "dark"
-        ? "bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-slate-800/80"
-        : "bg-gradient-to-b from-orange-50/80 via-white to-slate-50 border-slate-200"
-        }`}>
+      <section className={`relative overflow-hidden border-b px-4 pb-8 md:pb-12 transition-colors duration-300 ${
+        hasActiveTracker
+          ? "pt-6 sm:pt-8"
+          : "pt-[140px] sm:pt-[84px]"
+      } ${
+        theme === "dark"
+          ? "bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-slate-800/80"
+          : "bg-gradient-to-b from-orange-50/80 via-white to-slate-50 border-slate-200"
+      }`}>
         <div className="max-w-5xl mx-auto text-center relative z-10 space-y-4">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -1782,107 +2335,7 @@ export default function StudentPortal() {
           </section>
         )}
 
-        {/* Multi-Order Live Tracker with Tabs */}
-        {activeOrderIDs.length > 0 && selectedTrackingID && trackingDetails && (
-          <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
-            {/* Multi-Order Tabs */}
-            {activeOrderIDs.length > 1 && (
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3 overflow-x-auto">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex-shrink-0">
-                  Active Orders ({activeOrderIDs.length}):
-                </span>
-                {activeOrderIDs.map((id, index) => {
-                  const isSel = id === selectedTrackingID;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => setSelectedTrackingID(id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 flex-shrink-0 ${isSel
-                        ? "bg-orange-500 text-slate-950 shadow-md shadow-orange-500/20"
-                        : "bg-slate-800 text-slate-300 hover:bg-slate-750"
-                        }`}
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>Order #{index + 1}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
 
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div>
-                <span className="text-[10px] font-black uppercase text-orange-400 tracking-wider">
-                  🚀 Live Campus Delivery
-                </span>
-                <h3 className="text-xl font-bold text-white">
-                  Order #{trackingDetails.order.order_number}
-                </h3>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-bold px-3 py-1 rounded-full uppercase">
-                  {trackingDetails.order.status.replace(/_/g, " ")}
-                </span>
-                <button
-                  onClick={() => {
-                    const remaining = activeOrderIDs.filter((id) => id !== selectedTrackingID);
-                    setActiveOrderIDs(remaining);
-                    if (remaining.length > 0) {
-                      setSelectedTrackingID(remaining[0]);
-                    } else {
-                      setSelectedTrackingID(null);
-                      setTrackingDetails(null);
-                    }
-                  }}
-                  title="Dismiss Tracking"
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-
-
-            {/* Tracking timeline */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              {[
-                { label: "Confirmed", active: true },
-                {
-                  label: "Preparing",
-                  active: ["preparing", "packed", "assigned", "out_for_delivery", "delivered"].includes(
-                    trackingDetails.order.status
-                  ),
-                },
-                {
-                  label: "Out for Delivery",
-                  active: ["out_for_delivery", "delivered"].includes(trackingDetails.order.status),
-                },
-                {
-                  label: "Delivered",
-                  active: trackingDetails.order.status === "delivered",
-                },
-              ].map((step, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-2xl border text-xs font-bold ${step.active
-                    ? "bg-orange-500/10 border-orange-500/40 text-orange-400"
-                    : "bg-slate-950 border-slate-800 text-slate-600"
-                    }`}
-                >
-                  {step.label}
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs text-slate-400 space-y-1">
-              <div>
-                Delivering to: <span className="text-white font-bold">{trackingDetails.order.building}, Floor {trackingDetails.order.floor}, Room {trackingDetails.order.room_number}</span>
-              </div>
-              <div>Estimated Delivery: <span className="text-orange-400 font-bold">15–20 mins</span></div>
-            </div>
-          </section>
-        )}
 
         {/* Reorder Section ("Order Again") if user has past history */}
         {pastOrderedProducts.length > 0 && (
@@ -2249,7 +2702,7 @@ export default function StudentPortal() {
       {/* Slide-over Persistent Cart Drawer */}
       <AnimatePresence>
         {isCartOpen && (
-          <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="fixed inset-0 z-[10005] overflow-hidden">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -2607,7 +3060,7 @@ export default function StudentPortal() {
       {/* Saved Location Modal */}
       <AnimatePresence>
         {showAddressModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10005] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2704,7 +3157,7 @@ export default function StudentPortal() {
       {/* Printing Modal */}
       <AnimatePresence>
         {showPrintingsModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10005] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2835,7 +3288,7 @@ export default function StudentPortal() {
       {/* Order History & Ratings/Reviews Modal */}
       <AnimatePresence>
         {showHistoryModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10005] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2864,9 +3317,11 @@ export default function StudentPortal() {
                 </div>
                 <button
                   onClick={() => setShowHistoryModal(false)}
-                  className={`p-1 rounded-lg transition ${theme === "dark" ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
+                  title="Close Order History Modal"
+                  className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 border border-orange-500/30 px-3 py-1.5 rounded-xl transition font-black flex items-center space-x-1"
                 >
                   <X className="w-5 h-5" />
+                  <span className="text-xs font-bold">Close</span>
                 </button>
               </div>
 
@@ -2897,6 +3352,39 @@ export default function StudentPortal() {
                           {ord.status.replace(/_/g, " ")}
                         </span>
                       </div>
+
+                      {/* Active Live Conveyor Belt & Verification Action */}
+                      {ord.status !== "delivered" && ord.status !== "cancelled" && ord.status !== "out_of_stock" && (
+                        <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/30 p-2.5 rounded-xl">
+                          <div className="flex items-center space-x-2 text-xs">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500"></span>
+                            </span>
+                            <span className="font-bold text-orange-400 text-xs">Active Delivery in Progress</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setDismissedBannerIDs((prev) => {
+                                const updated = prev.filter((id) => id !== ord.id);
+                                if (typeof window !== "undefined") {
+                                  localStorage.setItem("dismissed_tracking_banner_ids", JSON.stringify(updated));
+                                }
+                                return updated;
+                              });
+                              setSelectedTrackingID(ord.id);
+                              setActiveOrderIDs((prev) => Array.from(new Set([...prev, ord.id])));
+                              setShowHistoryModal(false);
+                              setEnlargedTrackingOrderID(null);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                            className="bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 font-black px-3 py-1.5 rounded-xl text-xs shadow-md hover:from-orange-600 hover:to-amber-600 transition flex items-center space-x-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>🍿 View Live Belt & PIN</span>
+                          </button>
+                        </div>
+                      )}
                       {/* Structured Delivery Location Card */}
                       <div className={`border rounded-xl p-2.5 text-xs space-y-1 transition-colors ${
                         theme === "dark" ? "bg-slate-900/60 border-slate-800/80" : "bg-white border-slate-200"
@@ -2966,7 +3454,7 @@ export default function StudentPortal() {
       {/* 1-5 Star Review Submission Modal */}
       <AnimatePresence>
         {ratingModalOrderID && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10005] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -3053,10 +3541,144 @@ export default function StudentPortal() {
         )}
       </AnimatePresence>
 
+      {/* Enlarged Active Order Tracker Modal */}
+      <AnimatePresence>
+        {enlargedTrackingOrderID && (
+          <div className="fixed inset-0 z-[10005] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEnlargedTrackingOrderID(null)}
+              className={`absolute inset-0 backdrop-blur-md transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/85" : "bg-slate-900/60"
+              }`}
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-xl w-full rounded-3xl p-5 md:p-6 space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto border z-10 bg-slate-900 border-slate-800 text-slate-100"
+            >
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-orange-400 tracking-wider block">
+                    🍿 Live Food Conveyor Belt Tracker
+                  </span>
+                  <h3 className="text-xl font-black text-white">
+                    Order #{enlargedTrackingDetails?.order?.order_number || "..."}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setEnlargedTrackingOrderID(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {enlargedTrackingDetails ? (
+                <>
+                  {/* 1. Live Food Conveyor Belt Component (Only for Present/Active Orders) */}
+                  {enlargedTrackingDetails.order.status !== "delivered" &&
+                    enlargedTrackingDetails.order.status !== "cancelled" &&
+                    enlargedTrackingDetails.order.status !== "out_of_stock" && (
+                      <FoodConveyorBelt
+                        status={enlargedTrackingDetails.order.status}
+                        theme={theme}
+                        isEnlarged={true}
+                      />
+                    )}
+
+                  {/* 2. Step-by-Step Tracking Timeline */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    {[
+                      { label: "Confirmed", active: true },
+                      {
+                        label: "Cooking",
+                        active: ["preparing", "packed", "assigned", "out_for_delivery", "delivered"].includes(
+                          enlargedTrackingDetails.order.status
+                        ),
+                      },
+                      {
+                        label: "Out for Delivery",
+                        active: ["out_for_delivery", "delivered"].includes(enlargedTrackingDetails.order.status),
+                      },
+                      {
+                        label: "Delivered",
+                        active: enlargedTrackingDetails.order.status === "delivered",
+                      },
+                    ].map((step, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded-xl border text-xs font-bold ${
+                          step.active
+                            ? "bg-orange-500/15 border-orange-500/40 text-orange-400"
+                            : "bg-slate-950 border-slate-800 text-slate-600"
+                        }`}
+                      >
+                        {step.label}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 3. Delivery Details & Delivery Partner */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Delivery Destination:</span>
+                      <span className="font-bold text-white">
+                        {enlargedTrackingDetails.order.building}, Floor {enlargedTrackingDetails.order.floor}, Room {enlargedTrackingDetails.order.room_number}
+                      </span>
+                    </div>
+                    {enlargedTrackingDetails.delivery_partner && (
+                      <div className="flex justify-between items-center border-t border-slate-800/80 pt-2">
+                        <span className="text-slate-400">Delivery Agent:</span>
+                        <span className="font-bold text-orange-400">
+                          {enlargedTrackingDetails.delivery_partner.name} ({enlargedTrackingDetails.delivery_partner.phone})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Promotional Ad Banner (Full Resolution & Display Size) */}
+                  {trackingAd?.is_enabled && trackingAd?.image_url && (
+                    <div className="border border-indigo-500/40 rounded-2xl overflow-hidden bg-slate-950 p-4 space-y-3">
+                      <span className="text-[11px] font-black text-indigo-400 uppercase tracking-wider block">
+                        📢 Campus Special Offer & Announcement
+                      </span>
+                      <img
+                        src={trackingAd.image_url}
+                        alt="Campus Ad"
+                        className="w-full max-h-none object-contain rounded-xl border border-slate-800 shadow-lg"
+                      />
+                    </div>
+                  )}
+
+                  {/* 5. Verification Code Box (Only for Present/Active Orders) */}
+                  {enlargedTrackingDetails.order.status !== "delivered" &&
+                    enlargedTrackingDetails.order.status !== "cancelled" &&
+                    enlargedTrackingDetails.order.status !== "out_of_stock" && (
+                      <StudentVerificationCodeCard
+                        orderNumber={enlargedTrackingDetails.order.order_number}
+                        theme={theme}
+                      />
+                    )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center py-12 space-x-2 text-slate-400 text-xs">
+                  <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+                  <span>Loading live conveyor belt & tracking details...</span>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Secondary Actions Account Drawer Modal */}
       <AnimatePresence>
         {showAccountDrawer && (
-          <div className="fixed inset-0 z-50 overflow-hidden flex items-end sm:items-center justify-center p-2 sm:p-4">
+          <div className="fixed inset-0 z-[10005] overflow-hidden flex items-end sm:items-center justify-center p-2 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

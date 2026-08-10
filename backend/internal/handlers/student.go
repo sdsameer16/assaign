@@ -505,15 +505,21 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 	rand.Seed(time.Now().UnixNano())
 	orderNum := fmt.Sprintf("CB-%d-%d", time.Now().Unix()%100000, rand.Intn(900)+100)
 
+	var slotIDParam interface{} = nil
+	if strings.TrimSpace(req.DeliverySlotID) != "" {
+		slotIDParam = strings.TrimSpace(req.DeliverySlotID)
+	}
+
 	var orderID string
 	insertOrder := `
 		INSERT INTO orders (order_number, student_id, room_number, building, floor, total_amount, status, special_instructions, delivery_slot_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
-	err = tx.QueryRow(ctx, insertOrder, orderNum, studentID, req.RoomNumber, req.Building, req.Floor, totalAmount, models.OrderStatusReceived, req.SpecialInstructions, req.DeliverySlotID).Scan(&orderID)
+	err = tx.QueryRow(ctx, insertOrder, orderNum, studentID, req.RoomNumber, req.Building, req.Floor, totalAmount, models.OrderStatusReceived, req.SpecialInstructions, slotIDParam).Scan(&orderID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to save order header")
+		fmt.Printf("Order creation failed (save order header): %v\n", err)
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save order header: %v", err))
 		return
 	}
 
@@ -524,7 +530,8 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		`
 		_, err = tx.Exec(ctx, insertItem, orderID, item.ProductID, item.Quantity, productDetails[item.ProductID].Price)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "failed to save items")
+			fmt.Printf("Order creation failed (save item %s): %v\n", item.ProductID, err)
+			RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save items: %v", err))
 			return
 		}
 	}
@@ -538,7 +545,8 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		`, orderID, job.req.FileURL, job.req.FileName, job.req.FileType, job.req.ColorMode, job.req.Sides,
 			job.req.PageCount, job.req.Copies, job.unitPrice, job.lineTotal)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "failed to save print jobs")
+			fmt.Printf("Order creation failed (save print job): %v\n", err)
+			RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save print jobs: %v", err))
 			return
 		}
 	}
@@ -549,7 +557,8 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 	`
 	_, err = tx.Exec(ctx, insertHistory, orderID, models.OrderStatusReceived, studentID, time.Now())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to save history")
+		fmt.Printf("Order creation failed (save history): %v\n", err)
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save history: %v", err))
 		return
 	}
 
@@ -559,19 +568,25 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 	`
 	_, err = tx.Exec(ctx, insertPayment, orderID, rzpOrderID, totalAmount, models.PaymentStatusCreated)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to save payment record")
+		fmt.Printf("Order creation failed (save payment record): %v\n", err)
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save payment record: %v", err))
 		return
 	}
 
 	_, err = tx.Exec(ctx, `UPDATE students SET last_room_number = $1 WHERE id = $2`, req.RoomNumber, studentID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to update room number")
+		fmt.Printf("Order creation failed (update room number): %v\n", err)
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to update room number: %v", err))
 		return
 	}
 
+	// Empty student's cart in DB upon order creation
+	_, _ = tx.Exec(ctx, `DELETE FROM cart_items WHERE cart_id IN (SELECT id FROM carts WHERE student_id = $1)`, studentID)
+
 	err = tx.Commit(ctx)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to commit transaction")
+		fmt.Printf("Order creation failed (commit tx): %v\n", err)
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to commit transaction: %v", err))
 		return
 	}
 
