@@ -225,6 +225,12 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
+    adminApi.getCutoff().then(data => {
+      if (data && data.cutoff_time) {
+        setCutoffTime(data.cutoff_time);
+      }
+    }).catch(() => {});
+
     const savedToken = getToken();
     const savedProfile = getProfile();
     if (savedToken && savedProfile) {

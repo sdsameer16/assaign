@@ -185,7 +185,18 @@ export const adminApi = {
       method: "POST",
     }),
 
-  getCutoff: () => apiRequest<{ cutoff_time: string }>("/cutoff"),
+  getCutoff: async () => {
+    try {
+      return await apiRequest<{ cutoff_time: string }>("/cutoff");
+    } catch (e) {
+      const baseUrl = getApiBaseUrl().replace("/api/admin", "/api/student");
+      const res = await fetch(`${baseUrl}/cutoff`);
+      if (res.ok) {
+        return await res.json();
+      }
+      return { cutoff_time: "00:01" };
+    }
+  },
 
   setCutoff: (cutoffTime: string) =>
     apiRequest<{ message: string }>("/cutoff", {
