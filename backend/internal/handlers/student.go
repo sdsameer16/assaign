@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,9 @@ import (
 
 	"campusbites/backend/internal/models"
 	"math/rand"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 )
 
 type RegisterRequest struct {
@@ -61,15 +65,23 @@ func (h *HandlerContext) StudentRegister(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 
 	// 1. Check duplicate roll number or mobile number
-	var exists bool
-	dupQuery := `SELECT EXISTS(SELECT 1 FROM students WHERE mobile_number = $1 OR roll_number = $2)`
-	err := h.DB.Pool.QueryRow(ctx, dupQuery, req.MobileNumber, req.RollNumber).Scan(&exists)
-	if err != nil {
+	var existingID string
+	var existingStatus string
+	dupQuery := `SELECT id, verification_status::text FROM students WHERE mobile_number = $1 OR roll_number = $2`
+	err := h.DB.Pool.QueryRow(ctx, dupQuery, req.MobileNumber, req.RollNumber).Scan(&existingID, &existingStatus)
+	if err == nil {
+		if existingStatus == string(models.VerificationStatusVerified) {
+			RespondError(w, http.StatusConflict, "mobile number or roll number already registered and verified")
+			return
+		}
+		// Allow re-registration by deleting the unverified record
+		_, delErr := h.DB.Pool.Exec(ctx, "DELETE FROM students WHERE id = $1", existingID)
+		if delErr != nil {
+			RespondError(w, http.StatusInternalServerError, "failed to cleanup previous unverified registration")
+			return
+		}
+	} else if err != pgx.ErrNoRows {
 		RespondError(w, http.StatusInternalServerError, "database error: "+err.Error())
-		return
-	}
-	if exists {
-		RespondError(w, http.StatusConflict, "mobile number or roll number already registered")
 		return
 	}
 
@@ -98,7 +110,7 @@ func (h *HandlerContext) StudentRegister(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	verificationStatus := models.VerificationStatusVerified
+	verificationStatus := string(models.VerificationStatusVerified)
 
 	// 3. Begin Transaction to insert student + document
 	tx, err := h.DB.Pool.Begin(ctx)
@@ -200,7 +212,7 @@ func (h *HandlerContext) StudentLogin(w http.ResponseWriter, r *http.Request) {
 	var lastRoom sql.NullString
 
 	query := `
-		SELECT id, mobile_number, short_name, roll_number, last_room_number, verification_status, registered_at
+		SELECT id, mobile_number, short_name, roll_number, last_room_number, verification_status::text, registered_at
 		FROM students
 		WHERE mobile_number = $1
 	`
@@ -215,7 +227,16 @@ func (h *HandlerContext) StudentLogin(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		if err != pgx.ErrNoRows {
+			fmt.Printf("Error querying student login: %v\n", err)
+		}
 		RespondError(w, http.StatusNotFound, "student profile not found, please register")
+		return
+	}
+
+
+	if student.VerificationStatus != string(models.VerificationStatusVerified) {
+		RespondError(w, http.StatusNotFound, "student profile found but not verified, please complete registration")
 		return
 	}
 
@@ -317,8 +338,12 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 				}
 
 				cutoffTime := time.Date(now.Year(), now.Month(), now.Day(), ch, cm, 0, 0, now.Location())
-				if now.After(cutoffTime) {
-					RespondError(w, http.StatusForbidden, fmt.Sprintf("Ordering has closed for today at %s", cutoffVal))
+				if now.After(cutoffTime) || cutoffVal == "00:01" || cutoffVal == "0:01" {
+					if cutoffVal == "00:01" || cutoffVal == "0:01" {
+						RespondError(w, http.StatusForbidden, "🚀 Something BIG is Cooking!\nWe're taking a short break today to bring you something even better.\nCampusBites will be back tomorrow! ❤️\n\nStay tuned — we've got something special coming your way. 🔥")
+					} else {
+						RespondError(w, http.StatusForbidden, "🌙 Ordering is closed right now! All delivery slots for today have passed their cutoff time. Please check back tomorrow morning.")
+					}
 					return
 				}
 			}
@@ -358,8 +383,12 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusBadRequest, "selected delivery slot is disabled")
 		return
 	}
-	if !isSlotOrderingOpen(slotCutoff, istNow()) {
-		RespondError(w, http.StatusForbidden, fmt.Sprintf("ordering for this slot closed at %s", slotCutoff))
+	if !isSlotOrderingOpen(slotCutoff, istNow()) || slotCutoff == "00:01" || slotCutoff == "0:01" {
+		if slotCutoff == "00:01" || slotCutoff == "0:01" {
+			RespondError(w, http.StatusForbidden, "🚀 Something BIG is Cooking!\nWe're taking a short break today to bring you something even better.\nCampusBites will be back tomorrow! ❤️\n\nStay tuned — we've got something special coming your way. 🔥")
+		} else {
+			RespondError(w, http.StatusForbidden, "🌙 Ordering is closed right now! All delivery slots for today have passed their cutoff time. Please check back tomorrow morning.")
+		}
 		return
 	}
 
@@ -384,7 +413,12 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 	// Check if student is blocked
 	var status string
 	err = h.DB.Pool.QueryRow(ctx, `SELECT verification_status FROM students WHERE id = $1`, studentID).Scan(&status)
-	if err != nil || status == models.VerificationStatusRejected {
+	if err != nil {
+		fmt.Printf("Error fetching student verification status: %v\n", err)
+		RespondError(w, http.StatusUnauthorized, "Account not found or session expired. Please log in again.")
+		return
+	}
+	if status == models.VerificationStatusRejected {
 		RespondError(w, http.StatusForbidden, "your account is blocked by an admin")
 		return
 	}
@@ -890,7 +924,7 @@ type FCMTokenRequest struct {
 // SaveStudentFCMToken handles saving the FCM token for the student
 func (h *HandlerContext) SaveStudentFCMToken(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("user_id").(string)
-	
+
 	var req FCMTokenRequest
 	if err := jsonNewDecoder(r, &req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid payload")
@@ -938,6 +972,276 @@ func (h *HandlerContext) AcceptPrivacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "privacy policy accepted"})
+}
+
+// GetCart returns the authenticated student's stored cart items
+func (h *HandlerContext) GetCart(w http.ResponseWriter, r *http.Request) {
+	studentID, ok := r.Context().Value("user_id").(string)
+	if !ok || studentID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	ctx := r.Context()
+	var cartID string
+	err := h.DB.Pool.QueryRow(ctx, "SELECT id FROM carts WHERE student_id = $1", studentID).Scan(&cartID)
+	if err != nil {
+		RespondJSON(w, http.StatusOK, map[string]interface{}{"items": []models.CartItemData{}})
+		return
+	}
+
+	rows, err := h.DB.Pool.Query(ctx, "SELECT product_id, quantity FROM cart_items WHERE cart_id = $1", cartID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to query cart items")
+		return
+	}
+	defer rows.Close()
+
+	var items []models.CartItemData
+	for rows.Next() {
+		var item models.CartItemData
+		if err := rows.Scan(&item.ProductID, &item.Quantity); err == nil {
+			items = append(items, item)
+		}
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"items": items})
+}
+
+// UpdateCart replaces the student's stored cart with the provided items
+func (h *HandlerContext) UpdateCart(w http.ResponseWriter, r *http.Request) {
+	studentID, ok := r.Context().Value("user_id").(string)
+	if !ok || studentID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Items []models.CartItemData `json:"items"`
+	}
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to begin transaction")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var cartID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO carts (student_id, updated_at) VALUES ($1, NOW())
+		ON CONFLICT (student_id) DO UPDATE SET updated_at = NOW()
+		RETURNING id
+	`, studentID).Scan(&cartID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to upsert cart")
+		return
+	}
+
+	_, err = tx.Exec(ctx, "DELETE FROM cart_items WHERE cart_id = $1", cartID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to clear existing items")
+		return
+	}
+
+	for _, item := range req.Items {
+		if item.Quantity > 0 && item.ProductID != "" {
+			_, _ = tx.Exec(ctx, `
+				INSERT INTO cart_items (cart_id, product_id, quantity)
+				VALUES ($1, $2, $3)
+			`, cartID, item.ProductID, item.Quantity)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit transaction")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"status": "success", "items": req.Items})
+}
+
+// MergeCart merges a guest user's cart into the authenticated student's cart on login
+func (h *HandlerContext) MergeCart(w http.ResponseWriter, r *http.Request) {
+	studentID, ok := r.Context().Value("user_id").(string)
+	if !ok || studentID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Items []models.CartItemData `json:"items"`
+	}
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to begin transaction")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var cartID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO carts (student_id, updated_at) VALUES ($1, NOW())
+		ON CONFLICT (student_id) DO UPDATE SET updated_at = NOW()
+		RETURNING id
+	`, studentID).Scan(&cartID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to upsert cart")
+		return
+	}
+
+	for _, guestItem := range req.Items {
+		if guestItem.Quantity > 0 && guestItem.ProductID != "" {
+			_, _ = tx.Exec(ctx, `
+				INSERT INTO cart_items (cart_id, product_id, quantity)
+				VALUES ($1, $2, $3)
+				ON CONFLICT (cart_id, product_id)
+				DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity
+			`, cartID, guestItem.ProductID, guestItem.Quantity)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit cart merge")
+		return
+	}
+
+	rows, err := h.DB.Pool.Query(ctx, "SELECT product_id, quantity FROM cart_items WHERE cart_id = $1", cartID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to fetch merged cart")
+		return
+	}
+	defer rows.Close()
+
+	var mergedItems []models.CartItemData
+	for rows.Next() {
+		var item models.CartItemData
+		if err := rows.Scan(&item.ProductID, &item.Quantity); err == nil {
+			mergedItems = append(mergedItems, item)
+		}
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"status": "merged", "items": mergedItems})
+}
+
+// CreateOrderReview stores rating and text review for a student's delivered order
+func (h *HandlerContext) CreateOrderReview(w http.ResponseWriter, r *http.Request) {
+	studentID, ok := r.Context().Value("user_id").(string)
+	if !ok || studentID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	orderID := chi.URLParam(r, "id")
+	if orderID == "" {
+		RespondError(w, http.StatusBadRequest, "order_id is required")
+		return
+	}
+
+	var req struct {
+		Rating int    `json:"rating"`
+		Review string `json:"review"`
+	}
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Rating < 1 || req.Rating > 5 {
+		RespondError(w, http.StatusBadRequest, "rating must be between 1 and 5 stars")
+		return
+	}
+
+	ctx := r.Context()
+	var exists bool
+	err := h.DB.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM orders WHERE id = $1 AND student_id = $2)", orderID, studentID).Scan(&exists)
+	if err != nil || !exists {
+		RespondError(w, http.StatusForbidden, "order not found or does not belong to you")
+		return
+	}
+
+	_, err = h.DB.Pool.Exec(ctx, `
+		INSERT INTO order_reviews (order_id, student_id, rating, review, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (order_id)
+		DO UPDATE SET rating = EXCLUDED.rating, review = EXCLUDED.review, created_at = NOW()
+	`, orderID, studentID, req.Rating, req.Review)
+
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to store order review")
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"status": "success", "message": "Review submitted successfully"})
+}
+
+func (h *HandlerContext) ensureMenuScheduleTables(ctx context.Context) {
+	createTablesSQL := `
+		CREATE TABLE IF NOT EXISTS menu_schedules (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name VARCHAR(100) NOT NULL,
+			start_time TIME NOT NULL,
+			end_time TIME NOT NULL,
+			is_enabled BOOLEAN DEFAULT TRUE,
+			display_order INT DEFAULT 0,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS menu_schedule_categories (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			schedule_id UUID NOT NULL REFERENCES menu_schedules(id) ON DELETE CASCADE,
+			category_id UUID NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+			display_order INT DEFAULT 0,
+			CONSTRAINT unique_schedule_category UNIQUE (schedule_id, category_id)
+		);
+	`
+	_, _ = h.DB.Pool.Exec(ctx, createTablesSQL)
+}
+
+// GetActiveMenuSchedules returns enabled menu schedules for student menu display
+func (h *HandlerContext) GetActiveMenuSchedules(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h.ensureMenuScheduleTables(ctx)
+
+	query := `
+		SELECT ms.id, ms.name, TO_CHAR(ms.start_time, 'HH24:MI'), TO_CHAR(ms.end_time, 'HH24:MI'), ms.is_enabled, ms.display_order
+		FROM menu_schedules ms
+		WHERE ms.is_enabled = TRUE
+		ORDER BY ms.display_order ASC, ms.start_time ASC
+	`
+	rows, err := h.DB.Pool.Query(ctx, query)
+	if err != nil {
+		RespondJSON(w, http.StatusOK, []models.MenuSchedule{})
+		return
+	}
+	defer rows.Close()
+
+	var schedules []models.MenuSchedule
+	for rows.Next() {
+		var s models.MenuSchedule
+		if err := rows.Scan(&s.ID, &s.Name, &s.StartTime, &s.EndTime, &s.IsEnabled, &s.DisplayOrder); err == nil {
+			s.Categories = h.getMenuScheduleCategories(ctx, s.ID)
+			schedules = append(schedules, s)
+		}
+	}
+
+	if schedules == nil {
+		schedules = []models.MenuSchedule{}
+	}
+
+	RespondJSON(w, http.StatusOK, schedules)
 }
 
 // Helper to decode JSON bodies

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Script from "next/script";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -24,8 +24,34 @@ import {
   X,
   Printer,
   Eye,
+  Plus,
+  Minus,
+  ChevronRight,
+  Utensils,
+  Flame,
+  Zap,
+  Award,
+  Percent,
+  ShoppingBasket,
+  RotateCcw,
+  Building2,
+  Tag,
+  Mail,
+  Sun,
+  Moon,
 } from "lucide-react";
-import { Product, Category, Student, Order, PrintPricing, PrintColorMode, PrintSides, TrackingAd } from "@campusbites/types";
+import {
+  Product,
+  Category,
+  Student,
+  Order,
+  PrintPricing,
+  PrintColorMode,
+  PrintSides,
+  TrackingAd,
+  MenuSchedule,
+} from "@campusbites/types";
+
 import { requestForToken, onMessageListener } from "../lib/firebase";
 import {
   studentApi,
@@ -34,12 +60,53 @@ import {
   logout,
   setSession,
 } from "../lib/api";
+
+const AnimatedPrinterIcon = ({ className }: { className?: string }) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Top paper moving down */}
+      <motion.polyline
+        points="6 9 6 2 18 2 18 9"
+        initial={{ y: -4, opacity: 0 }}
+        animate={{ y: [-4, 0, 0, -4], opacity: [0, 1, 1, 0] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+      {/* Printer body */}
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      {/* Bottom paper moving out */}
+      <motion.rect
+        width="12"
+        height="8"
+        x="6"
+        y="14"
+        initial={{ y: -8, opacity: 0 }}
+        animate={{ y: [-8, -8, 0, 0], opacity: [0, 0, 1, 1] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </svg>
+  );
+};
+
 import {
   uploadPrintFile,
   uploadImageDataUrl,
   isAcceptedPrintFile,
 } from "../lib/cloudinary";
-import { countPrintPages, pageCountHint, billablePrintUnits, PageCountSource } from "../lib/printPageCount";
+import {
+  countPrintPages,
+  pageCountHint,
+  billablePrintUnits,
+  PageCountSource,
+} from "../lib/printPageCount";
 
 type CartPrintJob = {
   localId: string;
@@ -66,6 +133,7 @@ type PrintDraftFile = {
 export default function StudentPortal() {
   // Authentication & Profile states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Student | null>(null);
   const [mobileNumber, setMobileNumber] = useState("");
@@ -75,19 +143,22 @@ export default function StudentPortal() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [regName, setRegName] = useState("");
   const [regRoll, setRegRoll] = useState("");
-  const [regIDUrl, setRegIDUrl] = useState(""); // Empty by default to force scan
+  const [regIDUrl, setRegIDUrl] = useState("");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
 
-  // Menu, categories & Search states
+  // Menu & Category states
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [menuLoading, setMenuLoading] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
 
-  // Cart state
+
+  // Cart & Persistence states
   const [cart, setCart] = useState<{ [product_id: string]: number }>({});
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [printJobs, setPrintJobs] = useState<CartPrintJob[]>([]);
   const [printPricing, setPrintPricing] = useState<PrintPricing | null>(null);
   const [showPrintingsModal, setShowPrintingsModal] = useState(false);
@@ -98,37 +169,40 @@ export default function StudentPortal() {
   const [printSides, setPrintSides] = useState<PrintSides>("single");
   const [printCopies, setPrintCopies] = useState(1);
 
-  // Checkout Form states
-  const [roomNumber, setRoomNumber] = useState("");
+  // Saved Delivery Address states
   const [building, setBuilding] = useState("N Block");
   const [floor, setFloor] = useState(1);
+  const [roomNumber, setRoomNumber] = useState("");
+  const [showAddressModal, setShowAddressModal] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  // Privacy Policy states
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [privacyChecked, setPrivacyChecked] = useState(false);
-  const [privacyLoading, setPrivacyLoading] = useState(false);
+  // Dynamic Delivery Config State
+  const [deliveryFee, setDeliveryFee] = useState(15);
+  const [minFreeDeliveryAmount, setMinFreeDeliveryAmount] = useState(100);
 
-  // Consent Modal states
-  const [showConsentModal, setShowConsentModal] = useState(false);
-  const [consentChecks, setConsentChecks] = useState([false, false, false, false]);
-  const [consentInput, setConsentInput] = useState("");
+  // Privacy & Consent
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
 
   // Payment Screen states
   const [activePayment, setActivePayment] = useState<any>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
 
-  // Active Tracking states
-  const [activeOrderID, setActiveOrderID] = useState<string | null>(null);
+  // Multi-Order Active Tracking & Order History Modals
+  const [activeOrderIDs, setActiveOrderIDs] = useState<string[]>([]);
+  const [selectedTrackingID, setSelectedTrackingID] = useState<string | null>(null);
   const [trackingDetails, setTrackingDetails] = useState<any>(null);
-  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [trackingAd, setTrackingAd] = useState<TrackingAd | null>(null);
   const [trackingMinimized, setTrackingMinimized] = useState(false);
   const [showMenuExplorer, setShowMenuExplorer] = useState(false);
-  const [showSupport, setShowSupport] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [ratingModalOrderID, setRatingModalOrderID] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [cutoffTime, setCutoffTime] = useState<string | null>(null);
-  const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+  const [orderHistory, setOrderHistory] = useState<Order[]>([]);
   const [deliverySlots, setDeliverySlots] = useState<
     {
       id: string;
@@ -140,13 +214,70 @@ export default function StudentPortal() {
       is_ordering_open: boolean;
     }[]
   >([]);
+
+  const isCutoff0001 = (val: string | null) => {
+    if (!val) return false;
+    const clean = val.trim().toLowerCase();
+    return (
+      clean === "00:01" ||
+      clean === "0:01" ||
+      clean === "00:01:00" ||
+      clean === "12:01 am" ||
+      clean === "00:01 am" ||
+      clean === "12:01:00 am"
+    );
+  };
+
+  const is0001CutoffMode = useMemo(() => {
+    if (isCutoff0001(cutoffTime)) return true;
+    if (deliverySlots.length > 0 && deliverySlots.every((s) => isCutoff0001(s.order_cutoff))) {
+      return true;
+    }
+    return false;
+  }, [cutoffTime, deliverySlots]);
+
+  const isAllSlotsClosed = useMemo(() => {
+    if (deliverySlots.length === 0) return false;
+    return !deliverySlots.some((s) => s.is_active && s.is_ordering_open);
+  }, [deliverySlots]);
+
+  const isGlobalCutoffPassed = useMemo(() => {
+    if (!cutoffTime || isCutoff0001(cutoffTime)) return false;
+    try {
+      const parts = cutoffTime.split(":");
+      if (parts.length >= 2) {
+        const cHour = parseInt(parts[0], 10);
+        const cMin = parseInt(parts[1], 10);
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const cutoffMinutes = cHour * 60 + cMin;
+        return nowMinutes >= cutoffMinutes;
+      }
+    } catch (e) {}
+    return false;
+  }, [cutoffTime]);
+
+  const isOrderingClosed = is0001CutoffMode || isAllSlotsClosed || isGlobalCutoffPassed;
+
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("campusbites_theme", next);
+    }
+  };
+
   const [selectedSlotId, setSelectedSlotId] = useState("");
+
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const videoRef = React.useRef<HTMLVideoElement | null>(null);
-  const orderPanelRef = React.useRef<HTMLDivElement | null>(null);
 
-  // Load session & configuration on start
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const menuSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Load session, stored location, menu & cart on initialization
   useEffect(() => {
     const savedToken = getToken();
     const savedProfile = getProfile();
@@ -154,15 +285,137 @@ export default function StudentPortal() {
       setToken(savedToken);
       setProfile(savedProfile);
       setIsLoggedIn(true);
-      setRoomNumber(savedProfile.last_room_number || "");
+      if (savedProfile.last_room_number) {
+        setRoomNumber(savedProfile.last_room_number);
+      }
       checkForActiveOrder();
       checkPrivacyStatus();
+      fetchOrderHistory();
     }
+
+    // Load saved theme and delivery location from localStorage
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("campusbites_theme");
+      if (savedTheme === "light" || savedTheme === "dark") {
+        setTheme(savedTheme as any);
+      }
+
+      const savedLoc = localStorage.getItem("campusbites_saved_location");
+
+      if (savedLoc) {
+        try {
+          const parsed = JSON.parse(savedLoc);
+          if (parsed.building) setBuilding(parsed.building);
+          if (parsed.floor) setFloor(parsed.floor);
+          if (parsed.roomNumber) setRoomNumber(parsed.roomNumber);
+        } catch (e) { }
+      }
+    }
+
     loadMenu();
     fetchCutoffConfig();
     fetchDeliverySlots();
+    fetchDeliveryConfig();
     fetchPrintPricing();
+    initializeCartState(Boolean(savedToken));
   }, []);
+
+  const fetchDeliveryConfig = async () => {
+    try {
+      const cfg = await studentApi.getDeliveryConfig();
+      if (cfg) {
+        setDeliveryFee(cfg.delivery_fee);
+        setMinFreeDeliveryAmount(cfg.min_free_delivery_amount);
+      }
+    } catch (e) {
+      console.error("Failed to load delivery config:", e);
+    }
+  };
+
+
+  // Sync cart items with backend (if logged in) or localStorage (if guest)
+  const syncCartState = async (
+    updatedCart: { [product_id: string]: number },
+    isAuth: boolean
+  ) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("campusbites_cart_cache", JSON.stringify(updatedCart));
+    }
+    const items = Object.entries(updatedCart).map(([product_id, quantity]) => ({
+      product_id,
+      quantity,
+    }));
+
+    if (isAuth) {
+      try {
+        await studentApi.updateCart(items);
+      } catch (e) {
+        console.error("Failed to sync cart with backend:", e);
+      }
+    } else if (typeof window !== "undefined") {
+      localStorage.setItem("campusbites_guest_cart", JSON.stringify(updatedCart));
+    }
+  };
+
+  const initializeCartState = async (loggedIn: boolean) => {
+    if (loggedIn) {
+      try {
+        let guestCartMap: { [key: string]: number } = {};
+        const guestRaw =
+          typeof window !== "undefined"
+            ? localStorage.getItem("campusbites_guest_cart")
+            : null;
+        if (guestRaw) {
+          try {
+            guestCartMap = JSON.parse(guestRaw);
+          } catch (e) { }
+        }
+        const guestItems = Object.entries(guestCartMap).map(
+          ([product_id, quantity]) => ({ product_id, quantity })
+        );
+
+        if (guestItems.length > 0) {
+          const res = await studentApi.mergeCart(guestItems);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("campusbites_guest_cart");
+          }
+          const mergedMap: { [key: string]: number } = {};
+          (res.items || []).forEach((it) => {
+            if (it.quantity > 0) mergedMap[it.product_id] = it.quantity;
+          });
+          setCart(mergedMap);
+        } else {
+          const res = await studentApi.getCart();
+          const serverMap: { [key: string]: number } = {};
+          (res.items || []).forEach((it) => {
+            if (it.quantity > 0) serverMap[it.product_id] = it.quantity;
+          });
+          setCart(serverMap);
+        }
+      } catch (e) {
+        console.error("Failed to load user cart:", e);
+        const cacheRaw =
+          typeof window !== "undefined"
+            ? localStorage.getItem("campusbites_cart_cache")
+            : null;
+        if (cacheRaw) {
+          try {
+            setCart(JSON.parse(cacheRaw));
+          } catch (err) { }
+        }
+      }
+    } else {
+      const guestRaw =
+        typeof window !== "undefined"
+          ? localStorage.getItem("campusbites_guest_cart")
+          : null;
+      if (guestRaw) {
+        try {
+          setCart(JSON.parse(guestRaw));
+        } catch (e) { }
+      }
+    }
+  };
 
   const fetchPrintPricing = async () => {
     try {
@@ -173,12 +426,14 @@ export default function StudentPortal() {
     }
   };
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchDeliverySlots();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const fetchOrderHistory = async () => {
+    try {
+      const history = await studentApi.getHistory();
+      setOrderHistory(history || []);
+    } catch (e) {
+      console.error("Failed to load order history:", e);
+    }
+  };
 
   const checkPrivacyStatus = async () => {
     try {
@@ -214,15 +469,19 @@ export default function StudentPortal() {
         const dismissed: string[] = dismissedRaw
           ? JSON.parse(dismissedRaw)
           : [];
-        const active = history.find(
+        const activeOrders = history.filter(
           (o) =>
             o.status !== "delivered" &&
             o.status !== "cancelled" &&
             o.payment_status === "paid" &&
-            !(o.status === "out_of_stock" && dismissed.includes(o.id)),
+            !(o.status === "out_of_stock" && dismissed.includes(o.id))
         );
-        if (active) {
-          setActiveOrderID(active.id);
+        const ids = activeOrders.map((o) => o.id);
+        setActiveOrderIDs(ids);
+        if (ids.length > 0) {
+          setSelectedTrackingID((prev) => (ids.includes(prev || "") ? prev : ids[0]));
+        } else {
+          setSelectedTrackingID(null);
         }
       }
     } catch (e) {
@@ -248,7 +507,7 @@ export default function StudentPortal() {
       setSelectedSlotId((prev) => {
         if (!prev) return prev;
         const stillOpen = (slots || []).find(
-          (s) => s.id === prev && s.is_ordering_open,
+          (s) => s.id === prev && s.is_ordering_open
         );
         return stillOpen ? prev : "";
       });
@@ -257,64 +516,9 @@ export default function StudentPortal() {
     }
   };
 
-  // Helper to parse cutoff time string
-  const parseTimeStr = (tStr: string) => {
-    const clean = tStr.trim().toUpperCase();
-    let hour = 0,
-      minute = 0;
-    if (clean.includes("AM") || clean.includes("PM")) {
-      const isPM = clean.includes("PM");
-      const timePart = clean.replace("AM", "").replace("PM", "").trim();
-      const parts = timePart.split(":");
-      hour = parseInt(parts[0], 10);
-      if (isPM && hour < 12) hour += 12;
-      if (!isPM && hour === 12) hour = 0;
-      minute = parseInt(parts[1], 10);
-    } else {
-      const parts = clean.split(":");
-      hour = parseInt(parts[0], 10);
-      minute = parseInt(parts[1], 10);
-    }
-    return { hour, minute };
-  };
-
-  // Poll ticking cutoff countdown
-  useEffect(() => {
-    if (!cutoffTime) return;
-
-    const updateCountdown = () => {
-      try {
-        const { hour, minute } = parseTimeStr(cutoffTime);
-        const now = new Date();
-        const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-        const ISTOffset = 5.5; // IST (India) offset
-        const istTime = new Date(utc + 3600000 * ISTOffset);
-
-        const cutoffDate = new Date(istTime);
-        cutoffDate.setHours(hour, minute, 0, 0);
-
-        const diffMs = cutoffDate.getTime() - istTime.getTime();
-        const diffSec = Math.floor(diffMs / 1000);
-
-        if (diffSec < 0) {
-          setCountdownSeconds(null);
-        } else {
-          setCountdownSeconds(diffSec);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [cutoffTime]);
-
-  // Poll active tracking if an order ID is active
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (activeOrderID) {
+    if (selectedTrackingID) {
       fetchTracking();
       fetchTrackingAd();
       interval = setInterval(fetchTracking, 4000);
@@ -323,7 +527,22 @@ export default function StudentPortal() {
       setTrackingMinimized(false);
     }
     return () => clearInterval(interval);
-  }, [activeOrderID]);
+  }, [selectedTrackingID]);
+
+  const fetchTracking = async () => {
+    if (!selectedTrackingID) return;
+    try {
+      const res = await studentApi.trackOrder(selectedTrackingID);
+      setTrackingDetails(res);
+    } catch (e: any) {
+      console.error("Tracking error:", e);
+      setActiveOrderIDs((prev) => prev.filter((id) => id !== selectedTrackingID));
+      setSelectedTrackingID(null);
+      setTrackingDetails(null);
+    }
+  };
+
+
 
   const fetchTrackingAd = async () => {
     try {
@@ -335,6 +554,57 @@ export default function StudentPortal() {
       console.error("Failed to load tracking ad:", e);
       setTrackingAd(null);
       setTrackingMinimized(false);
+    }
+  };
+
+  const loadMenu = async () => {
+    try {
+      setMenuLoading(true);
+      setNetworkError(false);
+      const data = await studentApi.getMenu();
+      setCategories(data.categories || []);
+      setProducts(
+        (data.products || []).filter(
+          (p: Product) =>
+            p.is_available &&
+            !p.name.toLowerCase().includes("load test") &&
+            !p.name.toLowerCase().includes("test category")
+        )
+      );
+    } catch (e) {
+      console.error("Failed to load food catalog:", e);
+      setNetworkError(true);
+    } finally {
+      setMenuLoading(false);
+    }
+  };
+
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mobileNumber) return;
+    try {
+      setIsLoginLoading(true);
+      const data = await studentApi.login(mobileNumber);
+      setSession(data.token, data.student);
+      setToken(data.token);
+      setProfile(data.student);
+      if (data.student.last_room_number) {
+        setRoomNumber(data.student.last_room_number);
+      }
+      setIsLoggedIn(true);
+      await initializeCartState(true);
+      checkForActiveOrder();
+      checkPrivacyStatus();
+      fetchOrderHistory();
+    } catch (err: any) {
+      if (err.message.includes("not found")) {
+        setIsRegistering(true);
+      } else {
+        alert(err.message);
+      }
+    } finally {
+      setIsLoginLoading(false);
     }
   };
 
@@ -354,32 +624,20 @@ export default function StudentPortal() {
         confidence: result.confidence,
       });
     } catch (ocrErr: any) {
-      console.warn("OCR preview failed:", ocrErr);
       setOcrResult(null);
       alert(
         ocrErr?.message ||
-          "Could not read your ID card. Please retake a clear photo and try again.",
+        "Could not read your ID card. Please retake a clear photo and try again."
       );
     } finally {
       setOcrLoading(false);
     }
   };
 
-  const updateConsentCheck = (index: number, value: boolean) => {
-    setConsentChecks((prev) => {
-      const next = [false, false, false, false];
-      for (let i = 0; i < 4; i++) {
-        next[i] = Boolean(prev[i]);
-      }
-      next[index] = value;
-      return next;
-    });
-  };
-
   const startCamera = async () => {
     if (!regName.trim() || !regRoll.trim()) {
       alert(
-        "Please enter your Short Name and College Roll Number before scanning your ID card.",
+        "Please enter your Short Name and College Roll Number before scanning your ID card."
       );
       return;
     }
@@ -417,82 +675,18 @@ export default function StudentPortal() {
       if (ctx) {
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/jpeg");
-
         stopCamera();
         setOcrLoading(true);
 
-        // Upload to Cloudinary
-        try {
-          const secureUrl = await uploadImageDataUrl(dataUrl);
-          setRegIDUrl(secureUrl);
-          await runServerOcrPreview(secureUrl);
-        } catch (uploadErr: any) {
-          console.error("Cloudinary upload error:", uploadErr);
-          alert(
-            "ID Card photo upload to Cloudinary failed: " +
-            uploadErr.message +
-            ". Please ensure internet is active and try again.",
-          );
-          setRegIDUrl("");
-          setOcrResult(null);
-        }
+        const secureUrl = await uploadImageDataUrl(dataUrl);
+        setRegIDUrl(secureUrl);
+        await runServerOcrPreview(secureUrl);
       }
     } catch (e: any) {
       alert("Capture failed: " + e.message);
     } finally {
       setOcrLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (showCamera && videoRef.current && cameraStream) {
-      videoRef.current.srcObject = cameraStream;
-    }
-  }, [showCamera, cameraStream]);
-
-
-
-  const loadMenu = async () => {
-    try {
-      setMenuLoading(true);
-      const data = await studentApi.getMenu();
-      setCategories(data.categories || []);
-      setProducts(data.products || []);
-    } catch (e) {
-      console.error("Failed to load food catalog:", e);
-    } finally {
-      setMenuLoading(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mobileNumber) return;
-    try {
-      setIsLoginLoading(true);
-      const data = await studentApi.login(mobileNumber);
-      setSession(data.token, data.student);
-      setToken(data.token);
-      setProfile(data.student);
-      setRoomNumber(data.student.last_room_number || "");
-      setIsLoggedIn(true);
-      checkForActiveOrder();
-      checkPrivacyStatus();
-    } catch (err: any) {
-      if (err.message.includes("not found")) {
-        setIsRegistering(true);
-      } else {
-        alert(err.message);
-      }
-    } finally {
-      setIsLoginLoading(false);
-    }
-  };
-
-  // Re-run server OCR when name/roll change after ID upload
-  const triggerOcrSimulate = async () => {
-    if (!regName || !regRoll || !regIDUrl) return;
-    await runServerOcrPreview(regIDUrl);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -504,7 +698,7 @@ export default function StudentPortal() {
     }
     if (!ocrResult || ocrResult.similarity_score < 60) {
       alert(
-        "ID card scan did not match well enough. Please retake a clear photo of your ID.",
+        "ID card scan did not match well enough. Please retake a clear photo of your ID."
       );
       return;
     }
@@ -522,18 +716,15 @@ export default function StudentPortal() {
       setIsLoggedIn(true);
       setIsRegistering(false);
       setOcrResult(null);
+      await initializeCartState(true);
       checkForActiveOrder();
       checkPrivacyStatus();
+      fetchOrderHistory();
     } catch (err: any) {
       alert("Registration failed: " + err.message);
     } finally {
       setIsLoginLoading(false);
     }
-  };
-
-  const loadProfile = () => {
-    const saved = getProfile();
-    if (saved) setProfile(saved);
   };
 
   const handleLogout = () => {
@@ -543,46 +734,64 @@ export default function StudentPortal() {
     setToken(null);
     setCart({});
     setPrintJobs([]);
-    setActiveOrderID(null);
+    setActiveOrderIDs([]);
+    setSelectedTrackingID(null);
+    setTrackingDetails(null);
     setShowMenuExplorer(false);
-  };
 
-  const rateForPrintOptions = (
-    pricing: PrintPricing,
-    colorMode: PrintColorMode,
-    sides: PrintSides,
-  ) => {
-    if (colorMode === "bw") {
-      return sides === "double" ? pricing.bw_double : pricing.bw_single;
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("campusbites_cart_cache");
     }
-    return sides === "double" ? pricing.color_double : pricing.color_single;
   };
 
-  const getDraftPageTotal = () =>
-    printDraftFiles.reduce((sum, f) => sum + (f.page_count || 0), 0);
-
-  const getDraftBillableUnits = () =>
-    printDraftFiles.reduce(
-      (sum, f) => sum + billablePrintUnits(f.page_count || 0, printSides),
-      0,
-    );
-
-  const getPrintPreviewTotal = () => {
-    if (!printPricing || printDraftFiles.length === 0) return 0;
-    const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
-    return unit * getDraftBillableUnits() * printCopies;
+  // Saved Location Persistence
+  const saveDeliveryAddress = (bld: string, flr: number, rm: string) => {
+    setBuilding(bld);
+    setFloor(flr);
+    setRoomNumber(rm);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "campusbites_saved_location",
+        JSON.stringify({ building: bld, floor: flr, roomNumber: rm })
+      );
+    }
+    setShowAddressModal(false);
   };
 
-  const draftPageSource = (): PageCountSource | null => {
-    if (printDraftFiles.length === 0) return null;
-    if (printDraftFiles.every((f) => f.source === "office")) return "office";
-    if (printDraftFiles.every((f) => f.source === "pdf")) return "pdf";
-    if (printDraftFiles.every((f) => f.source === "image")) return "image";
-    return null;
+  // Cart operations with sync
+  const addToCart = (productId: string) => {
+    setCart((prev) => {
+      const updated = { ...prev, [productId]: (prev[productId] || 0) + 1 };
+      syncCartState(updated, isLoggedIn);
+      return updated;
+    });
   };
 
+  const removeFromCart = (productId: string) => {
+    setCart((prev) => {
+      const updated = { ...prev };
+      if (!updated[productId] || updated[productId] <= 1) {
+        delete updated[productId];
+      } else {
+        updated[productId]--;
+      }
+      syncCartState(updated, isLoggedIn);
+      return updated;
+    });
+  };
+
+  const deleteItemFromCart = (productId: string) => {
+    setCart((prev) => {
+      const updated = { ...prev };
+      delete updated[productId];
+      syncCartState(updated, isLoggedIn);
+      return updated;
+    });
+  };
+
+  // Printing Service logic
   const handlePrintFilesSelected = async (
-    e: React.ChangeEvent<HTMLInputElement>,
+    e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -591,7 +800,7 @@ export default function StudentPortal() {
     for (const file of files) {
       if (!isAcceptedPrintFile(file.name)) {
         alert(
-          `Unsupported file: ${file.name}. Accepted: pdf, doc, docx, xls, xlsx, jpeg, jpg, png`,
+          `Unsupported file: ${file.name}. Accepted: pdf, doc, docx, xls, xlsx, jpeg, jpg, png`
         );
         return;
       }
@@ -625,24 +834,35 @@ export default function StudentPortal() {
     }
   };
 
-  const addPrintJobsToCart = () => {
-    if (!printPricing) {
-      alert("Print pricing is not available yet. Please try again.");
-      return;
+  const rateForPrintOptions = (
+    pricing: PrintPricing,
+    colorMode: PrintColorMode,
+    sides: PrintSides
+  ) => {
+    if (colorMode === "bw") {
+      return sides === "double" ? pricing.bw_double : pricing.bw_single;
     }
-    if (printDraftFiles.length === 0) {
-      alert("Please upload at least one file.");
-      return;
-    }
-    if (printDraftFiles.some((f) => !f.page_count || f.page_count <= 0)) {
-      alert("Page count is still being calculated. Please wait.");
-      return;
-    }
-    if (printCopies <= 0) {
-      alert("Copies must be greater than zero.");
-      return;
-    }
+    return sides === "double" ? pricing.color_double : pricing.color_single;
+  };
 
+  const getDraftBillableUnits = () =>
+    printDraftFiles.reduce(
+      (sum, f) => sum + billablePrintUnits(f.page_count || 0, printSides),
+      0
+    );
+
+  const getPrintPreviewTotal = () => {
+    if (!printPricing || printDraftFiles.length === 0) return 0;
+    const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
+    return unit * getDraftBillableUnits() * printCopies;
+  };
+
+  const addPrintJobsToCart = () => {
+    if (!printPricing) return;
+    if (printDraftFiles.length === 0) {
+      alert("Please upload at least one document.");
+      return;
+    }
     const unit = rateForPrintOptions(printPricing, printColorMode, printSides);
     const newJobs: CartPrintJob[] = printDraftFiles.map((f) => {
       const units = billablePrintUnits(f.page_count, printSides);
@@ -666,30 +886,14 @@ export default function StudentPortal() {
     setPrintColorMode("bw");
     setPrintSides("single");
     setShowPrintingsModal(false);
-    scrollToOrderPanel();
+    setIsCartOpen(true);
   };
 
   const removePrintJob = (localId: string) => {
     setPrintJobs((prev) => prev.filter((j) => j.localId !== localId));
   };
 
-  // Cart operations
-  const addToCart = (productId: string) => {
-    setCart((prev) => ({ ...prev, [productId]: (prev[productId] || 0) + 1 }));
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => {
-      const updated = { ...prev };
-      if (updated[productId] <= 1) {
-        delete updated[productId];
-      } else {
-        updated[productId]--;
-      }
-      return updated;
-    });
-  };
-
+  // Price & Cart Calculations
   const getFoodTotal = () => {
     return Object.entries(cart).reduce((total, [id, qty]) => {
       const prod = products.find((p) => p.id === id);
@@ -701,7 +905,11 @@ export default function StudentPortal() {
     return printJobs.reduce((sum, j) => sum + j.line_total, 0);
   };
 
-  const getCartTotal = () => getFoodTotal() + getPrintTotal();
+  const getSubtotal = () => getFoodTotal() + getPrintTotal();
+  const freeDeliveryThreshold = minFreeDeliveryAmount;
+  const currentDeliveryFee = getSubtotal() >= freeDeliveryThreshold || getSubtotal() === 0 ? 0 : deliveryFee;
+  const getFinalTotal = () => getSubtotal() + currentDeliveryFee;
+
 
   const getCartItemCount = () => {
     return (
@@ -709,2156 +917,1903 @@ export default function StudentPortal() {
     );
   };
 
-  const scrollToOrderPanel = () => {
-    if (activeOrderID && !showMenuExplorer) {
-      setShowMenuExplorer(true);
-    }
-    setTimeout(() => {
-      orderPanelRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
+  // Dynamic Time Greeting
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    const name = profile?.short_name || "Student";
+    if (hour >= 5 && hour < 12)
+      return {
+        title: `Good Morning, ${name} 🔆`,
+        period: "Morning",
+        subtitle: "Fresh breakfast, idly, parathas & hot coffee delivered to your floor",
+        tag: "🍳 Breakfast Specials",
+        buttonText: "Order Breakfast",
+        categoryId: "breakfast",
+      };
+    if (hour >= 12 && hour < 17)
+      return {
+        title: `Good Afternoon, ${name} 🌤️`,
+        period: "Lunch",
+        subtitle: "Hot biryani, meals, fried rice & thalis ready for corridor delivery",
+        tag: "🍗 Lunch Feast",
+        buttonText: "Order Lunch",
+        categoryId: "meals",
+      };
+    if (hour >= 17 && hour < 22)
+      return {
+        title: `Good Evening, ${name} 🌆`,
+        period: "Evening",
+        subtitle: "Crispy momos, burgers, fries & cold coffee for evening study breaks",
+        tag: "🍟 Evening Cravings",
+        buttonText: "Order Snacks",
+        categoryId: "snacks",
+      };
+    return {
+      title: `Late night cravings, ${name}? 🌙`,
+      period: "Night",
+      subtitle: "Midnight maggi, rolls, snacks & drinks delivered straight to your room",
+      tag: "🌙 Late Night Menu",
+      buttonText: "Order Late Night",
+      categoryId: "deals",
+    };
+  };
+
+  const timeGreeting = getTimeGreeting();
+
+  // Categories & Filtering
+  const cleanCategories = useMemo(() => {
+    return categories.filter(
+      (c) =>
+        !c.name.toLowerCase().includes("load test") &&
+        !c.name.toLowerCase().includes("test category")
+    );
+  }, [categories]);
+
+  // Derived recommendation IDs based on order history
+  const recommendedProductIds = useMemo(() => {
+    if (!orderHistory || orderHistory.length === 0) return [];
+    const counts: Record<string, number> = {};
+    orderHistory.forEach(order => {
+      order.items?.forEach(item => {
+        counts[item.product_id] = (counts[item.product_id] || 0) + item.quantity;
       });
-    }, 80);
-  };
-
-  // Open Razorpay Standard Checkout Modal
-  const openRazorpayModal = (paymentData: any) => {
-    if (!(window as any).Razorpay) {
-      alert("Razorpay SDK is not loaded yet. Please wait a second and try again.");
-      return;
-    }
-
-    const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    if (!razorpayKey) {
-      alert("Payment is not configured. NEXT_PUBLIC_RAZORPAY_KEY_ID is missing.");
-      return;
-    }
-
-    const enterTracking = () => {
-      setActiveOrderID(paymentData.order_id);
-      setActivePayment(null);
-      setCart({});
-      setPrintJobs([]);
-    };
-
-    const pollUntilPaid = async (timeoutMs = 60000) => {
-      const started = Date.now();
-      while (Date.now() - started < timeoutMs) {
-        try {
-          const status = await studentApi.getPaymentStatus(paymentData.order_id);
-          if (status.payment_status === "paid") {
-            return true;
-          }
-          if (
-            status.payment_status === "failed" ||
-            status.order_status === "cancelled"
-          ) {
-            return false;
-          }
-        } catch {
-          // keep polling
-        }
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      return false;
-    };
-
-    const options = {
-      key: razorpayKey,
-      amount: Math.round(paymentData.total_amount * 100),
-      currency: "INR",
-      name: "CampusBites",
-      description: `Order ${paymentData.order_number}`,
-      order_id: paymentData.razorpay_order_id,
-      config: {
-        display: {
-          blocks: {
-            upi: {
-              name: "Pay using UPI",
-              instruments: [
-                {
-                  method: "upi"
-                }
-              ]
-            }
-          },
-          sequence: ["block.upi"],
-          preferences: {
-            show_default_blocks: false
-          }
-        }
-      },
-      handler: async function (response: any) {
-        try {
-          setPaymentLoading(true);
-          let verified = false;
-          for (let attempt = 0; attempt < 3 && !verified; attempt++) {
-            try {
-              await studentApi.verifyPayment({
-                order_id: paymentData.order_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              });
-              verified = true;
-            } catch (e) {
-              if (attempt === 2) {
-                const paidViaWebhook = await pollUntilPaid(45000);
-                if (paidViaWebhook) {
-                  verified = true;
-                } else {
-                  throw e;
-                }
-              } else {
-                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-              }
-            }
-          }
-
-          if (verified) {
-            enterTracking();
-          }
-        } catch (e: any) {
-          alert("Payment verification failed: " + e.message);
-        } finally {
-          setPaymentLoading(false);
-        }
-      },
-      prefill: {
-        name: profile?.short_name || "",
-        contact: profile?.mobile_number || "",
-      },
-      theme: {
-        color: "#f97316",
-      },
-      modal: {
-        ondismiss: async function () {
-          // If payment completed but handler was lost (common after UPI return), recover via poll
-          setPaymentLoading(true);
-          try {
-            const paid = await pollUntilPaid(15000);
-            if (paid) {
-              enterTracking();
-              return;
-            }
-          } finally {
-            setPaymentLoading(false);
-          }
-        },
-      },
-    };
-
-    const rzp = new (window as any).Razorpay(options);
-    rzp.on("payment.failed", function (response: any) {
-      alert("Payment failed: " + response.error.description);
     });
-    rzp.open();
-  };
+    // Sort by most ordered
+    return Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  }, [orderHistory]);
 
-  const cancelActivePayment = async () => {
-    if (!activePayment?.order_id) {
-      setActivePayment(null);
-      return;
+  // Main UI Food Category Tabs
+  const foodCategoryList = useMemo(() => {
+    const list = [
+      { id: "all", name: "All Food", icon: "🍽️" },
+      { id: "breakfast", name: "Breakfast", icon: "🍳" },
+      { id: "biryani", name: "Biryani", icon: "🍗" },
+      { id: "fast food", name: "Fast Food", icon: "🍔" },
+      { id: "meals", name: "Meals", icon: "🍲" },
+      { id: "snacks", name: "Snacks", icon: "🍟" },
+      { id: "beverages", name: "Beverages", icon: "🥤" },
+      { id: "ice creams", name: "Ice Creams", icon: "🍦" },
+      { id: "desserts", name: "Desserts", icon: "🍰" },
+      { id: "combos", name: "Combos", icon: "🍱" },
+      { id: "deals", name: "Student Deals", icon: "🎓" },
+    ];
+    if (isLoggedIn && recommendedProductIds.length > 0) {
+      list.splice(1, 0, { id: "recommended", name: "Recommended", icon: "⭐" });
     }
-    try {
-      setPaymentLoading(true);
-      await studentApi.cancelUnpaidOrder(activePayment.order_id);
-    } catch (e: any) {
-      // If already paid/cancelled, still clear overlay when appropriate
-      console.error("Cancel unpaid order failed:", e);
-    } finally {
-      setPaymentLoading(false);
-      setActivePayment(null);
-    }
-  };
+    return list;
+  }, [isLoggedIn, recommendedProductIds.length]);
 
-  // Order Placement
-  const proceedToConsent = () => {
-    if (!roomNumber || !building || !floor) {
-      alert("Please fill in room details.");
-      return;
-    }
-    if (cutoffTime && countdownSeconds === null) {
-      alert(`Ordering has closed for today at ${cutoffTime}.`);
-      return;
-    }
-    if (!selectedSlotId) {
-      alert("Please select a delivery slot.");
-      return;
-    }
-    const selected = deliverySlots.find((s) => s.id === selectedSlotId);
-    if (!selected || !selected.is_ordering_open) {
-      alert("Selected delivery slot is closed. Please choose another slot.");
-      setSelectedSlotId("");
-      return;
-    }
-    setConsentChecks([false, false, false, false]);
-    setConsentInput("");
-    setShowConsentModal(true);
-  };
+  // Dynamic Product Filters
+  const filteredProducts = useMemo(() => {
+    const res = products.filter((p) => {
+      const q = searchQuery.toLowerCase().trim();
+      const catObj = cleanCategories.find((c) => c.id === p.category_id);
+      const catName = catObj ? catObj.name.toLowerCase() : "";
+      const pName = p.name.toLowerCase();
 
-  const handleNotificationConsent = async (checked: boolean) => {
-    updateConsentCheck(3, checked);
-    if (!checked) return;
-    try {
-      const token = await requestForToken();
-      if (token) {
-        await studentApi.saveFCMToken(token);
-      } else if (typeof window !== "undefined" && "Notification" in window) {
-        if (Notification.permission === "denied") {
-          alert(
-            "Notifications are blocked in your browser settings. Please allow notifications for CampusBites for live order updates and a better experience.",
-          );
+      let matchesSearch = true;
+      if (q) {
+        if (q.includes("under") || q.includes("<") || q.includes("budget")) {
+          const numMatch = q.match(/\d+/);
+          const limit = numMatch ? parseInt(numMatch[0], 10) : 50;
+          matchesSearch = p.selling_price <= limit;
         } else {
-          alert(
-            "Please tap Allow on the browser notification prompt for real-time order updates and a better experience.",
-          );
+          matchesSearch = pName.includes(q) || catName.includes(q);
         }
       }
-    } catch (e) {
-      console.warn("Failed to setup notifications", e);
-    }
-  };
 
-  const executeOrderPlacement = async () => {
-    if (!profile) return;
-    if (
-      !consentChecks[0] ||
-      !consentChecks[1] ||
-      !consentChecks[2] ||
-      !consentChecks[3] ||
-      consentInput.toLowerCase() !== "ok dev"
-    ) {
+      if (!matchesSearch) return false;
+
+      if (selectedCategory === "all") return true;
+      if (selectedCategory === "combos") return pName.includes("combo") || catName.includes("combo");
+      if (selectedCategory === "deals") return p.mrp > p.selling_price || pName.includes("deal");
+      if (selectedCategory === "recommended") return recommendedProductIds.includes(p.id);
+
+      return catName.includes(selectedCategory) || pName.includes(selectedCategory);
+    });
+
+    if (selectedCategory === "recommended") {
+      // Sort recommended products by frequency
+      res.sort((a: Product, b: Product) => recommendedProductIds.indexOf(a.id) - recommendedProductIds.indexOf(b.id));
+    }
+    return res;
+  }, [products, cleanCategories, selectedCategory, searchQuery, recommendedProductIds]);
+
+  // Popular items with real order statistics where available
+  const popularProducts = useMemo(() => {
+    return products.slice(0, 4);
+  }, [products]);
+
+  // Under ₹50 budget discovery
+  const budgetProducts = useMemo(() => {
+    return products.filter((p) => p.selling_price <= 50);
+  }, [products]);
+
+  const [dbSchedules, setDbSchedules] = useState<MenuSchedule[]>([]);
+
+  useEffect(() => {
+    studentApi
+      .getMenuSchedules()
+      .then((schedules) => setDbSchedules(schedules || []))
+      .catch((err) => console.error("Failed to load db menu schedules:", err));
+  }, []);
+
+  const activeSchedule = useMemo(() => {
+    if (!dbSchedules || dbSchedules.length === 0) return null;
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+
+    return dbSchedules.find((s) => {
+      if (!s.is_enabled) return false;
+      const [sh, sm] = (s.start_time || "00:00").split(":").map((n) => parseInt(n, 10) || 0);
+      const [eh, em] = (s.end_time || "23:59").split(":").map((n) => parseInt(n, 10) || 0);
+      const startMins = sh * 60 + sm;
+      const endMins = eh * 60 + em;
+
+      if (startMins <= endMins) {
+        return currentMins >= startMins && currentMins < endMins;
+      } else {
+        return currentMins >= startMins || currentMins < endMins;
+      }
+    });
+  }, [dbSchedules]);
+
+  // Dynamic Time Highlights (Integrates Admin DB Menu Schedules when configured)
+  const timeHighlights = useMemo(() => {
+    const period = timeGreeting.period;
+    const available = products.filter((p) => p.is_available !== false);
+
+    const getCat = (p: Product) =>
+      (categories.find((c) => c.id === p.category_id)?.name || "").toLowerCase();
+
+    // If active admin schedule exists with assigned categories, prioritize DB schedule categories!
+    if (activeSchedule && activeSchedule.categories && activeSchedule.categories.length > 0) {
+      const scheduledCatIDs = new Set(activeSchedule.categories.map((c) => c.category_id));
+      const scheduledItems = available.filter((p) => scheduledCatIDs.has(p.category_id));
+      if (scheduledItems.length >= 2) {
+        return scheduledItems.slice(0, 4);
+      }
+    }
+
+
+
+    const isJunkOrSnack = (p: Product) => {
+      const name = p.name.toLowerCase();
+      const cat = getCat(p);
+      return (
+        cat.includes("snack") ||
+        cat.includes("biscuit") ||
+        cat.includes("chocolate") ||
+        cat.includes("dessert") ||
+        cat.includes("beverage") ||
+        cat.includes("drink") ||
+        name.includes("oreo") ||
+        name.includes("kitkat") ||
+        name.includes("chocolate") ||
+        name.includes("biscuit") ||
+        name.includes("puff") ||
+        name.includes("chips") ||
+        name.includes("candy") ||
+        name.includes("drink") ||
+        name.includes("cookie")
+      );
+    };
+
+    let items: Product[] = [];
+    if (period === "Morning") {
+      items = available.filter((p) => {
+        const name = p.name.toLowerCase();
+        const cat = getCat(p);
+        return (
+          cat.includes("breakfast") ||
+          name.includes("idly") ||
+          name.includes("dosa") ||
+          name.includes("paratha") ||
+          name.includes("tea") ||
+          name.includes("coffee") ||
+          name.includes("poha") ||
+          name.includes("omelette") ||
+          name.includes("sandwich")
+        );
+      });
+    } else if (period === "Lunch") {
+      items = available.filter((p) => {
+        if (isJunkOrSnack(p)) return false;
+        const name = p.name.toLowerCase();
+        const cat = getCat(p);
+        return (
+          cat.includes("meals") ||
+          cat.includes("biryani") ||
+          cat.includes("main") ||
+          name.includes("biryani") ||
+          name.includes("meal") ||
+          name.includes("rice") ||
+          name.includes("thali") ||
+          name.includes("curry") ||
+          name.includes("paneer") ||
+          name.includes("chicken") ||
+          name.includes("roti") ||
+          name.includes("dal") ||
+          name.includes("paratha") ||
+          name.includes("pulao")
+        );
+      });
+    } else if (period === "Evening") {
+      items = available.filter((p) => {
+        const name = p.name.toLowerCase();
+        const cat = getCat(p);
+        return (
+          cat.includes("snack") ||
+          cat.includes("fast food") ||
+          cat.includes("beverage") ||
+          name.includes("samosa") ||
+          name.includes("momo") ||
+          name.includes("burger") ||
+          name.includes("maggi") ||
+          name.includes("tea") ||
+          name.includes("coffee") ||
+          name.includes("fries") ||
+          name.includes("roll")
+        );
+      });
+    } else {
+      items = available.filter((p) => {
+        const name = p.name.toLowerCase();
+        const cat = getCat(p);
+        return (
+          cat.includes("fast food") ||
+          cat.includes("snack") ||
+          name.includes("maggi") ||
+          name.includes("burger") ||
+          name.includes("pizza") ||
+          name.includes("roll") ||
+          name.includes("noodle")
+        );
+      });
+    }
+
+    if (items.length < 4) {
+      const existingIds = new Set(items.map((i) => i.id));
+      for (const p of available) {
+        if (!existingIds.has(p.id) && (period !== "Lunch" || !isJunkOrSnack(p))) {
+          items.push(p);
+          if (items.length >= 4) break;
+        }
+      }
+    }
+
+    return items.slice(0, 4);
+  }, [products, categories, timeGreeting.period, activeSchedule]);
+
+
+
+
+
+  // Food Combos
+  const comboProducts = useMemo(() => {
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes("combo") ||
+        p.mrp - p.selling_price >= 20
+    );
+  }, [products]);
+
+  // Reorder items from past history
+  const pastOrderedProducts = useMemo(() => {
+    const productMap = new Map<string, Product>();
+    orderHistory.forEach((o) => {
+      o.items?.forEach((item) => {
+        const found = products.find((p) => p.id === item.product_id);
+        if (found) productMap.set(found.id, found);
+      });
+    });
+    return Array.from(productMap.values());
+  }, [orderHistory, products]);
+
+  // Razorpay Checkout handler
+  const handleCheckout = async () => {
+    if (!isLoggedIn) {
+      alert("Please log in with your mobile number to place an order.");
+      return;
+    }
+    if (!roomNumber.trim()) {
+      alert("Please enter your Room Number for corridor delivery.");
+      setShowAddressModal(true);
+      return;
+    }
+    if (getCartItemCount() === 0) {
+      alert("Your cart is empty. Add some food or print jobs first!");
       return;
     }
 
-    // Re-request / refresh notification permission on every order.
-    try {
-      const token = await requestForToken();
-      if (token) {
-        await studentApi.saveFCMToken(token);
-      }
-    } catch (e) {
-      console.warn("Notification setup on checkout failed", e);
+    if (is0001CutoffMode) {
+      alert(
+        "🚀 Something BIG is Cooking!\nWe're taking a short break today to bring you something even better.\nCampusBites will be back tomorrow! ❤️\n\nStay tuned — we've got something special coming your way. 🔥"
+      );
+      return;
     }
 
-    const items = Object.entries(cart).map(([id, qty]) => ({
-      product_id: id,
-      quantity: qty,
-    }));
+    if (isOrderingClosed) {
+      alert(
+        "🌙 Ordering is closed right now! All delivery slots for today have passed their cutoff time. Please check back tomorrow morning."
+      );
+      return;
+    }
 
-    if (items.length === 0 && printJobs.length === 0) {
-      alert("Add food items or print jobs before checkout.");
+    // Auto-select open slot if needed
+    const openSlot = deliverySlots.find((s) => s.is_ordering_open && s.is_active);
+    const targetSlotId = selectedSlotId || (openSlot ? openSlot.id : "");
+
+    if (!targetSlotId) {
+      alert("🌙 Ordering is closed right now! All delivery slots for today have passed their cutoff time. Please check back tomorrow morning.");
       return;
     }
 
     try {
       setCheckoutLoading(true);
-      const data = await studentApi.createOrder({
+      const itemsPayload = Object.entries(cart).map(([product_id, quantity]) => ({
+        product_id,
+        quantity,
+      }));
+
+      const printJobsPayload = printJobs.map((j) => ({
+        file_url: j.file_url,
+        file_name: j.file_name,
+        file_type: j.file_type,
+        color_mode: j.color_mode,
+        sides: j.sides,
+        page_count: j.page_count,
+        copies: j.copies,
+      }));
+
+      const orderData = await studentApi.createOrder({
         room_number: roomNumber,
-        building,
-        floor,
+        building: building,
+        floor: floor,
         special_instructions: specialInstructions,
-        delivery_slot_id: selectedSlotId,
-        items,
-        print_jobs: printJobs.map((j) => ({
-          file_url: j.file_url,
-          file_name: j.file_name,
-          file_type: j.file_type,
-          color_mode: j.color_mode,
-          sides: j.sides,
-          page_count: j.page_count,
-          copies: j.copies,
-        })),
+        delivery_slot_id: targetSlotId,
+        items: itemsPayload,
+        print_jobs: printJobsPayload,
       });
 
-      setActivePayment(data);
-      // Automatically trigger the Razorpay modal
-      setTimeout(() => {
-        openRazorpayModal(data);
-      }, 100);
-      
-      setShowConsentModal(false);
-    } catch (e: any) {
-      alert("Failed to place order: " + e.message);
+      setIsCartOpen(false);
+
+      if ((window as any).Razorpay && process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+        const options = {
+          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+          amount: Math.round(orderData.total_amount * 100),
+          currency: "INR",
+          name: "CampusBites",
+          description: `Order #${orderData.order_number} (Floor Delivery)`,
+          order_id: orderData.razorpay_order_id,
+          handler: async (response: any) => {
+            try {
+              await studentApi.verifyPayment({
+                order_id: orderData.order_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
+              setSelectedTrackingID(orderData.order_id);
+              setCart({});
+              setPrintJobs([]);
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("campusbites_cart_cache");
+              }
+              fetchOrderHistory();
+            } catch (e: any) {
+              alert("Payment verification failed: " + e.message);
+            }
+          },
+
+          prefill: {
+            name: profile?.short_name || "Student",
+            contact: profile?.mobile_number || "",
+          },
+          theme: { color: "#f97316" },
+        };
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } else {
+        alert("Razorpay payment gateway is missing. Please ensure NEXT_PUBLIC_RAZORPAY_KEY_ID is configured in your environment.");
+      }
+    } catch (err: any) {
+      alert("Failed to place order: " + err.message);
     } finally {
       setCheckoutLoading(false);
     }
   };
 
-  // Tracking API lookup
-  const fetchTracking = async () => {
-    if (!activeOrderID) return;
-    try {
-      const data = await studentApi.trackOrder(activeOrderID);
-      setTrackingDetails(data);
-      setTrackingError(null);
-    } catch (e: any) {
-      setTrackingError(e.message);
-    }
-  };
 
-  // Filtering Menu
-  const filteredProducts = products.filter((p) => {
-    const matchesCategory =
-      selectedCategory === "all" || p.category_id === selectedCategory;
-    const matchesSearch = p.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
 
-  const getRating = (name: string) => {
-    const code = name.charCodeAt(0) % 5;
-    const rate = (4.4 + code * 0.1).toFixed(1);
-    const count = 15 + (name.charCodeAt(1) % 10) * 12;
-    return { rate, count };
-  };
-
-  const isBestseller = (name: string) => {
-    return (
-      name.includes("Combo") ||
-      name.includes("Burger") ||
-      name.includes("Tea") ||
-      name.includes("Samosa")
-    );
+  const scrollToMenu = () => {
+    setIsCartOpen(false);
+    menuSectionRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
-    <div className="flex-1 bg-[#f8f9fa] text-slate-800 min-h-screen font-sans overflow-x-hidden">
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="bg-orange-500 p-2 rounded-xl text-white font-bold shadow-lg shadow-orange-500/20 flex items-center justify-center">
-              <ShoppingBag className="w-5 h-5" />
+    <div className={`min-h-screen font-sans pb-24 transition-colors duration-300 ${theme === "dark" ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"}`}>
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+
+      {/* Header & Sticky Top Bar */}
+      <header className={`sticky top-0 z-40 backdrop-blur-md border-b shadow-lg transition-colors duration-300 ${theme === "dark" ? "bg-slate-900/90 border-slate-800" : "bg-white/90 border-slate-200"}`}>
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+
+          {/* Logo & Platform Tagline */}
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 dark:border-slate-800 flex items-center justify-center shadow-md shadow-orange-500/20 overflow-hidden">
+              <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
             </div>
-            <span className="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">
-              CampusBites
-            </span>
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <span className={`font-extrabold text-lg tracking-tight ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                  Campus Bites
+                </span>
+                {/*  */}
+              </div>
+              <p className={`text-[11px] hidden sm:block font-medium ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
+                Everything You Crave, Delivered to Your Floor
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            {isLoggedIn && profile && (
+          {/* Delivery Location Pill & Cart Control */}
+          <div className="flex items-center space-x-2.5">
+            {/* Delivery Location Indicator */}
+            <button
+              onClick={() => setShowAddressModal(true)}
+              className={`border rounded-xl px-3 py-1.5 text-xs flex items-center space-x-2 transition ${theme === "dark"
+                ? "bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-200"
+                : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-900 shadow-sm"
+                }`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <div className="text-left hidden md:block">
+                <span className={`text-[10px] block leading-none ${theme === "dark" ? "text-slate-400" : "text-slate-500 font-semibold"}`}>
+                  Delivering to
+                </span>
+                <span className={`font-bold ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}>
+                  {building}, Fl {floor} • {roomNumber || "Add Room"}
+                </span>
+              </div>
+              <span className={`font-bold md:hidden ${theme === "dark" ? "text-slate-200" : "text-slate-900"}`}>
+                {roomNumber ? `${building} R-${roomNumber}` : "Set Location"}
+              </span>
+            </button>
+
+
+            {/* Header Cart Badge Button */}
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-orange-500/20 transition active:scale-95"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>₹{getSubtotal()}</span>
+              {getCartItemCount() > 0 && (
+                <span className="bg-slate-950 text-orange-400 font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">
+                  {getCartItemCount()}
+                </span>
+              )}
+            </button>
+
+            {/* Order History & Ratings Button */}
+            {isLoggedIn && (
               <>
                 <button
                   onClick={() => {
-                    setShowPrintingsModal(true);
-                    if (!printPricing) fetchPrintPricing();
+                    fetchOrderHistory();
+                    setShowHistoryModal(true);
                   }}
-                  className="printings-cta group relative flex items-center gap-2.5 pl-1.5 pr-3.5 py-1.5 rounded-2xl text-white font-bold shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 active:scale-[0.97] transition-all"
-                  title="Printings — upload docs to print"
+                  title="My Orders & Reviews"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5"
                 >
-                  <span className="printings-cta-glow" aria-hidden />
-                  <span className="printer-scene" aria-hidden>
-                    <span className="printer-body">
-                      <span className="printer-slot" />
-                      <span className="printer-led" />
-                      <span className="printer-head" />
-                    </span>
-                    <span className="printer-sheet printer-sheet-in" />
-                    <span className="printer-sheet printer-sheet-out">
-                      <span className="printer-sheet-lines" />
-                    </span>
-                  </span>
-                  <span className="flex flex-col items-start leading-none pr-0.5">
-                    <span className="text-[13px] sm:text-sm tracking-tight">
-                      Printings
-                    </span>
-                    <span className="text-[9px] font-semibold text-orange-100/90 mt-0.5 hidden xs:inline sm:inline">
-                      PDF · Docs · Photos
-                    </span>
-                  </span>
-                  {printJobs.length > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-300 text-slate-900 text-[10px] font-black flex items-center justify-center border-2 border-white shadow">
-                      {printJobs.length}
-                    </span>
-                  )}
+                  <Clock className="w-4 h-4 text-orange-400" />
+                  <span className="hidden sm:inline">My Orders</span>
                 </button>
-
                 <button
                   onClick={() => {
-                    loadProfile();
+                    if (selectedTrackingID) {
+                      setTrackingMinimized(false);
+                    } else {
+                      alert("You don't have any active orders right now. Check 'My Orders' to see past orders!");
+                    }
                   }}
-                  className="hidden md:flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition text-slate-700 font-semibold"
+                  title="Live Tracking"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5"
                 >
-                  <User className="w-4 h-4 text-orange-500" />
-                  <span className="text-sm">{profile.short_name}</span>
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full ${profile.verification_status === "verified" ? "bg-emerald-500" : "bg-amber-500"}`}
-                    title={profile.verification_status}
-                  />
+                  <Flame className="w-4 h-4 text-orange-400 animate-pulse" />
+                  <span className="hidden sm:inline">Live</span>
                 </button>
-
                 <button
-                  onClick={handleLogout}
-                  className="p-2 bg-white hover:bg-red-50 hover:text-red-500 border border-slate-255 hover:border-red-200 rounded-xl transition text-slate-500"
-                  title="Logout"
+                  onClick={() => setShowPrintingsModal(true)}
+                  title="Printings"
+                  className="bg-orange-500 hover:bg-orange-600 text-slate-950 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-md shadow-orange-500/20"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <AnimatedPrinterIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Printings</span>
                 </button>
               </>
             )}
 
-            {isLoggedIn && getCartItemCount() > 0 && (
+            {/* Light / Dark Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme"}
+              className={
+                theme === "dark"
+                  ? "bg-slate-800 hover:bg-slate-700 text-amber-400 p-2 rounded-xl transition"
+                  : "bg-slate-200 hover:bg-slate-300 text-amber-600 p-2 rounded-xl transition border border-slate-300"
+              }
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+
+            {/* Profile / Logout */}
+            {isLoggedIn ? (
               <button
-                onClick={scrollToOrderPanel}
-                className="hidden md:flex relative bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl items-center space-x-2 shadow-lg shadow-orange-500/20 active:scale-95 text-white font-bold transition"
+                onClick={handleLogout}
+                title="Logout"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl transition"
               >
-                <ShoppingBag className="w-4 h-4" />
-                <span className="text-sm">{getCartItemCount()}</span>
-                <span className="absolute -top-1 -right-1 bg-amber-400 w-3.5 h-3.5 rounded-full border border-white flex items-center justify-center text-[9px] font-black text-slate-900">
-                  !
-                </span>
+                <LogOut className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition"
+              >
+                Login
               </button>
             )}
           </div>
+
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Auth Gateway Screen */}
-        {!isLoggedIn && (
-          <div className="max-w-md mx-auto my-12">
-            {!isRegistering ? (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-100"
+      {/* Main Hero & Food Positioning Banner */}
+      <section className={`relative overflow-hidden border-b px-4 py-8 md:py-12 transition-colors duration-300 ${theme === "dark"
+        ? "bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-slate-800/80"
+        : "bg-gradient-to-b from-orange-50/80 via-white to-slate-50 border-slate-200"
+        }`}>
+        <div className="max-w-5xl mx-auto text-center relative z-10 space-y-4">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="inline-flex items-center space-x-2 bg-orange-500/10 border border-orange-500/20 text-orange-600 dark:text-orange-400 px-3.5 py-1.5 rounded-full text-xs font-semibold"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+            <span>Made for students • Delivered inside campus</span>
+          </motion.div>
+
+          <h1 className={`text-3xl md:text-5xl font-black tracking-tight leading-tight ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+            {timeGreeting.title}
+          </h1>
+
+          <p className={`text-base md:text-lg max-w-2xl mx-auto font-normal leading-relaxed ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`}>
+            {timeGreeting.subtitle}
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
+            {[
+              { label: "🍳 Breakfast", cat: "breakfast" },
+              { label: "🍗 Biryani", cat: "biryani" },
+              { label: "🍲 Meals", cat: "meals" },
+              { label: "🍔 Fast Food", cat: "fast food" },
+              { label: "🍿 Snacks", cat: "snacks" },
+              { label: "🥤 Drinks", cat: "beverages" },
+              { label: "🖨️ Printing", cat: "printing" },
+            ].map((item) => (
+              <button
+                key={item.cat}
+                onClick={() => {
+                  if (item.cat === "printing") {
+                    setShowPrintingsModal(true);
+                  } else {
+                    setSelectedCategory(item.cat);
+                    scrollToMenu();
+                  }
+                }}
+                className={`border px-3 py-1 rounded-lg transition font-medium cursor-pointer ${theme === "dark"
+                  ? "bg-slate-800/80 hover:bg-orange-500 hover:text-slate-950 border-slate-700/60 text-slate-300"
+                  : "bg-white hover:bg-orange-500 hover:text-white border-slate-300 text-slate-800 shadow-sm"
+                  }`}
               >
-                <div className="text-center mb-8">
-                  <div className="inline-block bg-orange-50 text-orange-500 p-3.5 rounded-2xl mb-4">
-                    <Sparkles className="w-6 h-6 animate-pulse" />
-                  </div>
-                  <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-2">
-                    Craving Hot Snacks?
-                  </h1>
-                  <p className="text-slate-500 text-sm">
-                    Log in with your mobile number to checkout in under 30
-                    seconds!
-                  </p>
-                </div>
-
-                <form onSubmit={handleLogin} className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                      Mobile Number
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold text-sm">
-                        +91
-                      </span>
-                      <input
-                        type="tel"
-                        value={mobileNumber}
-                        onChange={(e) =>
-                          setMobileNumber(
-                            e.target.value.replace(/\D/g, "").slice(0, 10),
-                          )
-                        }
-                        placeholder="9999988888"
-                        required
-                        className="w-full pl-14 pr-4 py-3.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-orange-500 rounded-xl outline-none text-slate-900 font-medium text-sm transition"
-                      />
-                    </div>
-                    <p className="text-[11px] text-orange-600 font-semibold mt-1.5">
-                      Enter correct mobile number, we use that for calling at the time of Delivery.
-                    </p>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isLoginLoading || mobileNumber.length !== 10}
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-orange-500/25 active:scale-98 transition"
-                  >
-                    {isLoginLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <span>Continue</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-                </form>
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-100"
-              >
-                <div className="text-center mb-6">
-                  <h1 className="text-2xl font-black text-slate-900 mb-1">
-                    OCR Identity Review
-                  </h1>
-                  <p className="text-slate-500 text-sm">
-                    Submit profile card. System automatically reviews matching
-                    similarity.
-                  </p>
-                </div>
-
-                <form onSubmit={handleRegister} className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                      Short Name (For Deliveries)
-                    </label>
-                    <input
-                      type="text"
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      placeholder="Shikhar Verma"
-                      required
-                      onBlur={triggerOcrSimulate}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:bg-white focus:border-orange-500 rounded-xl outline-none text-slate-900 text-sm transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                      College Roll Number
-                    </label>
-                    <input
-                      type="text"
-                      value={regRoll}
-                      onChange={(e) => setRegRoll(e.target.value)}
-                      placeholder="2026CS108"
-                      required
-                      onBlur={triggerOcrSimulate}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:bg-white focus:border-orange-500 rounded-xl outline-none text-slate-900 text-sm transition"
-                    />
-                  </div>
-
-                  {/* ID document upload scanner / selector */}
-                  <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-5 text-center space-y-4">
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">
-                      ID Card Verification Document
-                    </span>
-
-                    {regIDUrl && (
-                      <div className="h-28 bg-slate-100 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 relative group shadow-sm">
-                        <img
-                          src={regIDUrl}
-                          alt="Captured College ID"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition duration-200">
-                          <span className="text-[10px] text-white font-mono bg-slate-900/60 px-2 py-1 rounded">
-                            Captured ID Card
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {!regName.trim() || !regRoll.trim() ? (
-                      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-250 rounded-xl p-3 font-semibold text-center leading-relaxed">
-                        ⚠️ Please enter your Short Name and College Roll Number
-                        above to enable ID card scanning.
-                      </div>
-                    ) : null}
-
-                    <div className="flex flex-col gap-2.5">
-                      <button
-                        type="button"
-                        onClick={startCamera}
-                        disabled={!regName.trim() || !regRoll.trim()}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-sm transition active:scale-95"
-                      >
-                        <span>📷 Scan ID (Live Camera Only)</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* OCR Simulator Loader */}
-                  {ocrLoading && (
-                    <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-center justify-center space-x-2">
-                      <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
-                      <span className="text-xs font-semibold text-orange-700">
-                        Extracting details with OCR...
-                      </span>
-                    </div>
-                  )}
-
-                  {ocrResult && (
-                    <motion.div
-                      initial={{ scale: 0.95, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className={`rounded-xl p-4 space-y-2 text-xs border ${ocrResult.similarity_score >= 85
-                        ? "bg-emerald-50 border-emerald-100 text-slate-700"
-                        : "bg-amber-50 border-amber-200 text-slate-700"
-                        }`}
-                    >
-                      <div
-                        className={`flex justify-between font-bold ${ocrResult.similarity_score >= 85
-                          ? "text-emerald-700"
-                          : "text-amber-700"
-                          }`}
-                      >
-                        <span>OCR Extraction Completed</span>
-                        <span>
-                          Confidence: {ocrResult.confidence.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="text-slate-600 space-y-1">
-                        <div>
-                          Extracted Name:{" "}
-                          <span className="text-slate-900 font-medium">
-                            {ocrResult.extracted_name}
-                          </span>
-                        </div>
-                        <div>
-                          Extracted Roll:{" "}
-                          <span className="text-slate-900 font-medium">
-                            {ocrResult.extracted_roll}
-                          </span>
-                        </div>
-                        <div>
-                          Fuzzy Match Score:{" "}
-                          <span
-                            className={`font-bold ${ocrResult.similarity_score >= 85
-                              ? "text-emerald-600"
-                              : "text-amber-600"
-                              }`}
-                          >
-                            {ocrResult.similarity_score}%
-                          </span>
-                        </div>
-                      </div>
-                      {ocrResult.similarity_score >= 85 ? (
-                        <span className="block mt-1 text-[10px] text-emerald-600">
-                          ✓ Similarity above 85% - Instant auto-approval
-                          enabled.
-                        </span>
-                      ) : (
-                        <span className="block mt-1 text-[10px] text-amber-600">
-                          ⚠️ Similarity below 85% - Admin manual verification
-                          required.
-                        </span>
-                      )}
-                    </motion.div>
-                  )}
-
-                  <div className="flex space-x-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsRegistering(false)}
-                      className="w-1/3 bg-slate-50 border border-slate-200 text-slate-500 py-3 rounded-xl font-bold text-xs"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isLoginLoading || !ocrResult || ocrResult.similarity_score < 60 || !regIDUrl}
-                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl flex items-center justify-center space-x-2 text-sm disabled:opacity-40"
-                    >
-                      {isLoginLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <span>Verify & Create</span>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            )}
+                {item.label}
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* Active Order Tracking Screen */}
-        {isLoggedIn && activeOrderID && trackingDetails && (
-          <div className="mb-12 max-w-2xl mx-auto animate-fade-in">
-            <div className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl">
-              <a
-                href="https://whatsapp.com/channel/0029VbD7NoSEVccDCgghMI3K"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-3 mb-6 bg-emerald-50 border-2 border-emerald-400 rounded-2xl px-4 py-3 hover:bg-emerald-100 transition"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-sm font-bold text-emerald-800">
-                    For exiting offers join this Channel
-                  </span>
-                </span>
-                <span className="text-xs font-black uppercase tracking-wider text-emerald-700">
-                  Join
-                </span>
-              </a>
 
-              {trackingDetails.order.status === "out_of_stock" ? (
-                <div className="text-center space-y-5">
-                  <div>
-                    <span className="text-red-500 text-xs font-black uppercase tracking-wider block mb-1">
-                      Out of Stock
-                    </span>
-                    <h2 className="text-2xl font-extrabold text-slate-900">
-                      Order #{trackingDetails.order.order_number}
-                    </h2>
-                  </div>
-                  <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 space-y-3">
-                    <h3 className="text-lg font-black text-red-700">
-                      Sorry for the inconvenience
-                    </h3>
-                    <p className="text-sm text-slate-700 font-semibold leading-relaxed">
-                      Our orders are out of stock. Your money will be refunded
-                      within the evening of this day.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (activeOrderID) {
-                        const dismissedRaw =
-                          localStorage.getItem("dismissed_out_of_stock");
-                        const dismissed: string[] = dismissedRaw
-                          ? JSON.parse(dismissedRaw)
-                          : [];
-                        if (!dismissed.includes(activeOrderID)) {
-                          dismissed.push(activeOrderID);
-                          localStorage.setItem(
-                            "dismissed_out_of_stock",
-                            JSON.stringify(dismissed),
-                          );
-                        }
-                      }
-                      setActiveOrderID(null);
-                      setTrackingDetails(null);
-                      setShowMenuExplorer(false);
-                    }}
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl transition shadow-md shadow-orange-500/25"
-                  >
-                    OK
-                  </button>
-                </div>
-              ) : trackingAd?.is_enabled &&
-                trackingAd.image_url &&
-                trackingMinimized ? (
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-orange-100 bg-orange-50/80 rounded-2xl px-4 py-3">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block">
-                        Live order
-                      </span>
-                      <h2 className="text-base font-extrabold text-slate-900">
-                        Order #{trackingDetails.order.order_number}
-                      </h2>
-                      <span className="text-xs font-bold text-orange-700">
-                        ETA: {trackingDetails.eta_minutes} mins ·{" "}
-                        {trackingDetails.order.status.replace(/_/g, " ")}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setTrackingMinimized(false)}
-                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      View tracking
-                    </button>
-                  </div>
-                  <div className="rounded-2xl border border-slate-100 overflow-hidden bg-slate-50">
-                    <img
-                      src={trackingAd.image_url}
-                      alt="Advertisement"
-                      className="w-full h-auto max-h-[70vh] object-contain mx-auto"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <>
-              {/* Active tracking header */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-6 mb-6 gap-3">
-                <div>
-                  <span className="text-orange-500 text-xs font-black uppercase tracking-wider block mb-1">
-                    Live Delivery Progress
-                  </span>
-                  <h2 className="text-2xl font-extrabold text-slate-900">
-                    Order #{trackingDetails.order.order_number}
-                  </h2>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="bg-orange-50 border border-orange-100 px-4 py-2 rounded-xl flex items-center space-x-2">
-                    <Clock className="w-4 h-4 text-orange-600 animate-pulse" />
-                    <span className="text-sm font-bold text-orange-700">
-                      ETA: {trackingDetails.eta_minutes} mins
-                    </span>
-                  </div>
-                  {trackingAd?.is_enabled && trackingAd.image_url && (
-                    <motion.button
-                      type="button"
-                      onClick={() => setTrackingMinimized(true)}
-                      animate={{ x: [0, 6, 0, -6, 0] }}
-                      transition={{
-                        duration: 1.6,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs pl-1.5 pr-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm"
-                    >
-                      <img
-                        src={trackingAd.image_url}
-                        alt=""
-                        className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-100"
-                      />
-                      Show ad
-                    </motion.button>
-                  )}
-                </div>
-              </div>
 
-              {/* Dynamic food conveyor belt loop */}
-              <div className="relative bg-gradient-to-r from-orange-50/70 to-amber-50/70 border border-orange-100/70 rounded-2xl p-4 mb-6 overflow-hidden flex flex-col items-center justify-center min-h-[110px]">
-                <style>{`
-                  @keyframes conveyor {
-                    0% { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
-                  }
-                  @-webkit-keyframes conveyor {
-                    0% { -webkit-transform: translateX(0); }
-                    100% { -webkit-transform: translateX(-50%); }
-                  }
-                  .animate-conveyor {
-                    -webkit-animation: conveyor 15s linear infinite;
-                    animation: conveyor 15s linear infinite;
-                    display: inline-flex;
-                    width: max-content;
-                    will-change: transform;
-                  }
-                `}</style>
-                <div className="absolute top-2 left-3 text-[9px] text-orange-600 font-extrabold uppercase tracking-wider">
-                  Cravings conveyor belt
-                </div>
-
-                <div className="w-full overflow-hidden relative mt-2.5 py-2">
-                  <div className="flex space-x-12 whitespace-nowrap animate-conveyor">
-                    {/* Continuous drifting loop of yummy food visuals */}
-                    {[
-                      "🍕",
-                      "🍔",
-                      "🍟",
-                      "🍜",
-                      "🥤",
-                      "🍰",
-                      "🍪",
-                      "🍩",
-                      "🌯",
-                      "🍕",
-                      "🍔",
-                      "🍟",
-                      "🍜",
-                      "🥤",
-                      "🍰",
-                      "🍪",
-                      "🍩",
-                      "🌯",
-                    ].map((emoji, index) => (
-                      <span
-                        key={index}
-                        className="text-3xl filter drop-shadow-sm select-none inline-block transform hover:scale-125 transition"
-                      >
-                        {emoji}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-500 font-bold mt-1.5 animate-pulse uppercase tracking-wider">
-                  Preparing and packing fresh cravings...
-                </p>
-              </div>
-
-              {/* Delivery queue details */}
-              {trackingDetails.queue_position > 0 && (
-                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mb-6 flex items-start space-x-3 text-sm">
-                  <Bell className="w-4 h-4 text-orange-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <p className="font-bold text-orange-850">
-                      You are next in queue!
-                    </p>
-                    <p className="text-slate-600 text-xs mt-0.5">
-                      The delivery partner is handling deliveries. Your
-                      position:{" "}
-                      <span className="text-slate-900 font-semibold">
-                        #{trackingDetails.queue_position}
-                      </span>
-                      .
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Status Timeline */}
-              <div className="space-y-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 mb-8">
-                {/* 1. Accepted status node */}
-                <div className="flex items-start space-x-4 relative">
-                  <div className="w-6 h-6 rounded-full bg-orange-500 border-4 border-white flex items-center justify-center z-10 shadow-sm" />
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">
-                      Accepted
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Order confirmed & accepted by canteen
-                    </p>
-                  </div>
-                </div>
-
-                {/* 2. Packing status node */}
-                <div className="flex items-start space-x-4 relative">
-                  <div
-                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${[
-                      "preparing",
-                      "packed",
-                      "assigned",
-                      "out_for_delivery",
-                      "delivered",
-                    ].includes(trackingDetails.order.status)
-                      ? "bg-orange-500"
-                      : "bg-slate-200"
-                      }`}
-                  />
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">
-                      Packing
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Snacks are being prepared and packed hot
-                    </p>
-                  </div>
-                </div>
-
-                {/* 3. On the Way status node */}
-                <div className="flex items-start space-x-4 relative">
-                  <div
-                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${["out_for_delivery", "delivered"].includes(
-                      trackingDetails.order.status,
-                    )
-                      ? "bg-orange-500"
-                      : "bg-slate-200"
-                      }`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-slate-800 text-sm">
-                      On the Way
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      {trackingDetails.delivery_partner
-                        ? `Courier ${trackingDetails.delivery_partner.name} is carrying order to your corridor`
-                        : "Courier partner is navigating corridors to your block"}
-                    </p>
-
-                    {/* Live Elevator Tracker (Dynamic Movement) */}
-                    {trackingDetails.order.status === "out_for_delivery" &&
-                      trackingDetails.delivery_partner && (
-                        <div className="bg-orange-50/60 border border-orange-100/70 rounded-2xl p-4 mt-3 space-y-3 shadow-xs">
-                          <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-                            <span>Live Elevator Navigation Track</span>
-                            <span className="text-orange-600 bg-orange-100 px-2 py-0.5 rounded animate-pulse">
-                              Floor{" "}
-                              {trackingDetails.delivery_partner.current_floor}
-                            </span>
-                          </div>
-
-                          {/* Visual elevator track */}
-                          <div className="relative h-2 bg-slate-200 rounded-full flex justify-between items-center px-1">
-                            {/* Dynamic progress fill */}
-                            <div
-                              className="absolute left-0 h-full bg-gradient-to-r from-orange-500 to-amber-500 rounded-full transition-all duration-1000"
-                              style={{
-                                width: `${(trackingDetails.delivery_partner.current_floor / 4) * 100}%`,
-                              }}
-                            />
-
-                            {/* Floor dots */}
-                            {[0, 1, 2, 3, 4].map((f) => (
-                              <div
-                                key={f}
-                                className={`w-3.5 h-3.5 rounded-full z-10 border-2 transition-all flex items-center justify-center text-[7px] font-black ${trackingDetails.delivery_partner
-                                  .current_floor >= f
-                                  ? "bg-orange-500 border-white text-white"
-                                  : "bg-white border-slate-300 text-slate-400"
-                                  }`}
-                              >
-                                {f}
-                              </div>
-                            ))}
-
-                            {/* Bouncing bike icon */}
-                            <motion.div
-                              className="absolute z-20 -top-4 text-sm transition-all duration-1000"
-                              style={{
-                                left: `calc(${(trackingDetails.delivery_partner.current_floor / 4) * 100}% - 8px)`,
-                              }}
-                              animate={{ y: [0, -3, 0] }}
-                              transition={{ repeat: Infinity, duration: 1.2 }}
-                            >
-                              🚴
-                            </motion.div>
-                          </div>
-                          <div className="flex justify-between text-[8px] text-slate-400 font-bold uppercase tracking-wider">
-                            <span>Ground Floor (Canteen)</span>
-                            <span>
-                              Dest Room {trackingDetails.order.room_number}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                  </div>
-                </div>
-
-                {/* 4. Delivery status node */}
-                <div className="flex items-start space-x-4 relative">
-                  <div
-                    className={`w-6 h-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm ${trackingDetails.order.status === "delivered"
-                      ? "bg-emerald-500"
-                      : "bg-slate-200"
-                      }`}
-                  />
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">
-                      Delivery
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Order successfully hand-delivered
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Delivery verification screen badge */}
-              {trackingDetails.order.status !== "delivered" &&
-                (trackingDetails.not_available_flag ? (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center shadow-sm relative overflow-hidden my-4">
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 animate-pulse" />
-                    <span className="text-[10px] text-amber-700 uppercase tracking-widest font-black block mb-2">
-                      ⚠️ Not Present at Delivery Location
-                    </span>
-                    <p className="text-xs text-slate-700 font-extrabold leading-relaxed mb-3">
-                      You were not present for courier pickup. Your food has
-                      been returned to the Canteen. Please collect it from the
-                      counter!
-                    </p>
-                    <div className="inline-flex items-center space-x-2 bg-white border border-amber-200 px-4 py-1.5 rounded-lg shadow-sm">
-                      <span className="text-[10px] text-slate-500 font-bold">
-                        Counter Verification Code:
-                      </span>
-                      <span className="font-mono text-xs font-black text-amber-700">
-                        CB-{trackingDetails.order.order_number.split("-")[1]}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center shadow-inner relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 blur-2xl rounded-full" />
-                    <span className="text-[10px] text-orange-600 uppercase tracking-widest font-black block mb-2">
-                      Single-Use Delivery Code
-                    </span>
-                    <div className="inline-flex items-center space-x-2 bg-orange-50 border border-orange-100 px-5 py-2.5 rounded-xl">
-                      <Shield className="w-4 h-4 text-orange-600 animate-pulse" />
-                      <span className="font-mono text-lg font-black tracking-widest text-orange-700">
-                        CB-{trackingDetails.order.order_number.split("-")[1]}
-                      </span>
-                    </div>
-                    <span className="block text-[9px] text-slate-500 mt-2">
-                      Show this to the delivery partner when they arrive. Token
-                      invalidates instantly after usage.
-                    </span>
-                  </div>
-                ))}
-
-              {trackingDetails.order.status === "delivered" && (
-                <button
-                  onClick={() => {
-                    setActiveOrderID(null);
-                    setShowMenuExplorer(false);
-                  }}
-                  className="w-full mt-4 bg-emerald-650 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition shadow-md shadow-emerald-500/25"
-                >
-                  Order Completed - Back to Menu
-                </button>
-              )}
-              {trackingDetails.order.status !== "delivered" && (
-                <button
-                  onClick={() => setShowMenuExplorer(!showMenuExplorer)}
-                  className="w-full mt-4 bg-orange-50 hover:bg-orange-100/80 text-orange-600 font-extrabold py-3 rounded-xl transition text-xs uppercase tracking-widest flex items-center justify-center space-x-2 border border-orange-200/40"
-                >
-                  <span>
-                    {showMenuExplorer
-                      ? "Hide Canteen Menu"
-                      : "Explore Canteen Menu"}
-                  </span>
-                </button>
-              )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Razorpay Checkout Overlay */}
-        {isLoggedIn && activePayment && (
-          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white border border-slate-200 shadow-2xl rounded-3xl max-w-sm w-full p-8 text-center relative"
+          <div className="flex items-center justify-center space-x-3 pt-3">
+            <button
+              onClick={scrollToMenu}
+              className="bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold px-6 py-3 rounded-xl text-sm flex items-center space-x-2 shadow-lg shadow-orange-500/25 transition"
             >
-              <div className="w-12 h-12 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-orange-100">
-                <ShoppingBag className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-extrabold text-slate-900 mb-1">
-                Complete Payment
-              </h3>
-              <p className="text-xs text-slate-500 mb-6">
-                OrderID: {activePayment.razorpay_order_id}
-              </p>
+              <span>Order Now</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory(timeGreeting.categoryId);
+                scrollToMenu();
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-5 py-3 rounded-xl text-sm border border-slate-700 transition"
+            >
+              {timeGreeting.buttonText}
+            </button>
+          </div>
+        </div>
+      </section>
 
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 mb-6 flex justify-between items-center text-sm">
-                <span className="text-slate-500">Total Amount:</span>
-                <span className="font-black text-orange-600 text-lg">
-                  ₹{activePayment.total_amount.toFixed(2)}
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => openRazorpayModal(activePayment)}
-                  disabled={paymentLoading}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 transition flex items-center justify-center space-x-2"
-                >
-                  {paymentLoading ? (
-                    <>
-                      <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                      <span>Verifying Payment...</span>
-                    </>
-                  ) : (
-                    <span>Pay with Razorpay</span>
-                  )}
-                </button>
-                <button
-                  onClick={() => cancelActivePayment()}
-                  disabled={paymentLoading}
-                  className="w-full bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 py-3 rounded-xl font-semibold text-sm transition"
-                >
-                  Cancel & Go Back
-                </button>
-              </div>
-            </motion.div>
+      {/* Main Content Area */}
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-10">
+        {networkError && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-amber-300">
+            <div className="flex items-center space-x-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+              <span>Connecting to CampusBites backend at <strong>http://localhost:8080</strong>... Make sure Go server is running!</span>
+            </div>
+            <button
+              onClick={() => {
+                loadMenu();
+                fetchDeliverySlots();
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 py-1.5 rounded-xl transition shrink-0"
+            >
+              Retry Connection
+            </button>
           </div>
         )}
 
-        {/* Canteen Food Catalog */}
-        {isLoggedIn && (!activeOrderID || showMenuExplorer) && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-            {/* Catalog list */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Ticking Cutoff Timer Alert */}
-              {cutoffTime !== null && (
-                <div
-                  className={`p-4 rounded-2xl flex items-center justify-between border ${countdownSeconds !== null
-                    ? "bg-orange-50 border-orange-200 text-orange-800"
-                    : "bg-red-50 border-red-200 text-red-800"
-                    }`}
+
+        {/* Authentication Modal / Card if not logged in */}
+        {!isLoggedIn && (
+          <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-lg mx-auto shadow-2xl space-y-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black text-white">Student Login</h2>
+              <p className="text-xs text-slate-400">
+                Enter your mobile number to view saved orders & floor delivery
+              </p>
+            </div>
+
+            {!isRegistering ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value)}
+                    placeholder="9876543210"
+                    required
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 focus:border-orange-500 rounded-xl text-slate-100 text-sm outline-none transition"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoginLoading}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-3 rounded-xl flex items-center justify-center space-x-2 text-sm transition"
                 >
-                  <div className="flex items-center space-x-2.5">
-                    <Clock
-                      className={`w-4 h-4 ${countdownSeconds !== null ? "text-orange-600 animate-pulse" : "text-red-600"}`}
-                    />
-                    <div className="text-xs font-bold">
-                      {countdownSeconds !== null ? (
-                        <>
-                          <span>Canteen orders close in </span>
-                          <span className="font-mono text-sm font-black bg-orange-200/50 px-1.5 py-0.5 rounded">
-                            {Math.floor(countdownSeconds / 60)}m{" "}
-                            {countdownSeconds % 60}s
-                          </span>
-                          <span className="text-slate-500">
-                            {" "}
-                            (at {cutoffTime})
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-red-700 font-extrabold">
-                          🚫 Ordering has closed for today (Closed at{" "}
-                          {cutoffTime})
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {countdownSeconds !== null && (
-                    <span className="text-[9px] uppercase font-extrabold tracking-wider bg-orange-500 text-white px-2 py-0.5 rounded-md animate-pulse">
-                      Ordering Open
-                    </span>
+                  {isLoginLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <span>Continue with Mobile</span>
                   )}
-                </div>
-              )}
-
-              {/* Welcome card */}
-              <div className="bg-gradient-to-r from-orange-500 to-amber-500 border border-orange-600/10 rounded-3xl p-6 relative overflow-hidden flex items-center justify-between text-white shadow-lg shadow-orange-500/10">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent pointer-events-none" />
-                <div className="relative">
-                  <h1 className="text-2xl font-black mb-1">
-                    Hello, {profile?.short_name || "Student"}!
-                  </h1>
-                  <p className="text-orange-100 text-xs font-medium">
-                    Satisfy your cravings instantly! Warm snacks delivered to
-                    your floor corridor.
-                  </p>
-                </div>
-                <div className="hidden sm:block text-5xl">🍔</div>
-              </div>
-
-              {/* Search and Filters */}
-              <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-450 w-4 h-4" />
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Short Name
+                  </label>
                   <input
                     type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search hot food, beverages..."
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none text-slate-900 focus:border-orange-500 focus:shadow-sm transition-all duration-300"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="Sameer Sharma"
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 focus:border-orange-500 rounded-xl text-slate-100 text-sm outline-none"
                   />
                 </div>
-
-                <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-none">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Roll Number
+                  </label>
+                  <input
+                    type="text"
+                    value={regRoll}
+                    onChange={(e) => setRegRoll(e.target.value)}
+                    placeholder="2026CS101"
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 focus:border-orange-500 rounded-xl text-slate-100 text-sm outline-none"
+                  />
+                </div>
+                <div className="bg-slate-950 border border-dashed border-slate-800 rounded-2xl p-4 text-center space-y-3">
+                  <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">
+                    ID Card Verification Document
+                  </span>
+                  {regIDUrl && (
+                    <div className="h-24 bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
+                      <img src={regIDUrl} alt="ID" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <button
-                    onClick={() => setSelectedCategory("all")}
-                    className={`px-4 py-2.5 rounded-xl font-bold text-xs capitalize transition ${selectedCategory === "all"
-                      ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
-                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
+                    type="button"
+                    onClick={startCamera}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl text-xs flex items-center justify-center space-x-2"
                   >
-                    All
+                    <span>📷 Scan ID (Live Camera)</span>
                   </button>
-                  {categories.map((cat) => (
+                </div>
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRegistering(false)}
+                    className="w-1/3 bg-slate-800 text-slate-400 py-2.5 rounded-xl font-bold text-xs"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoginLoading || !regIDUrl}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs disabled:opacity-40"
+                  >
+                    Verify & Create Profile
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        )}
+
+        {/* Multi-Order Live Tracker with Tabs */}
+        {activeOrderIDs.length > 0 && selectedTrackingID && trackingDetails && (
+          <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
+            {/* Multi-Order Tabs */}
+            {activeOrderIDs.length > 1 && (
+              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3 overflow-x-auto">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex-shrink-0">
+                  Active Orders ({activeOrderIDs.length}):
+                </span>
+                {activeOrderIDs.map((id, index) => {
+                  const isSel = id === selectedTrackingID;
+                  return (
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={`px-4 py-2.5 rounded-xl font-bold text-xs capitalize whitespace-nowrap transition ${selectedCategory === cat.id
-                        ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      key={id}
+                      onClick={() => setSelectedTrackingID(id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 flex-shrink-0 ${isSel
+                        ? "bg-orange-500 text-slate-950 shadow-md shadow-orange-500/20"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-750"
                         }`}
                     >
-                      {cat.name}
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Order #{index + 1}</span>
                     </button>
-                  ))}
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <span className="text-[10px] font-black uppercase text-orange-400 tracking-wider">
+                  🚀 Live Campus Delivery
+                </span>
+                <h3 className="text-xl font-bold text-white">
+                  Order #{trackingDetails.order.order_number}
+                </h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-bold px-3 py-1 rounded-full uppercase">
+                  {trackingDetails.order.status.replace(/_/g, " ")}
+                </span>
+                <button
+                  onClick={() => {
+                    const remaining = activeOrderIDs.filter((id) => id !== selectedTrackingID);
+                    setActiveOrderIDs(remaining);
+                    if (remaining.length > 0) {
+                      setSelectedTrackingID(remaining[0]);
+                    } else {
+                      setSelectedTrackingID(null);
+                      setTrackingDetails(null);
+                    }
+                  }}
+                  title="Dismiss Tracking"
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+
+
+            {/* Tracking timeline */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              {[
+                { label: "Confirmed", active: true },
+                {
+                  label: "Preparing",
+                  active: ["preparing", "packed", "assigned", "out_for_delivery", "delivered"].includes(
+                    trackingDetails.order.status
+                  ),
+                },
+                {
+                  label: "Out for Delivery",
+                  active: ["out_for_delivery", "delivered"].includes(trackingDetails.order.status),
+                },
+                {
+                  label: "Delivered",
+                  active: trackingDetails.order.status === "delivered",
+                },
+              ].map((step, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-2xl border text-xs font-bold ${step.active
+                    ? "bg-orange-500/10 border-orange-500/40 text-orange-400"
+                    : "bg-slate-950 border-slate-800 text-slate-600"
+                    }`}
+                >
+                  {step.label}
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs text-slate-400 space-y-1">
+              <div>
+                Delivering to: <span className="text-white font-bold">{trackingDetails.order.building}, Floor {trackingDetails.order.floor}, Room {trackingDetails.order.room_number}</span>
+              </div>
+              <div>Estimated Delivery: <span className="text-orange-400 font-bold">15–20 mins</span></div>
+            </div>
+          </section>
+        )}
+
+        {/* Reorder Section ("Order Again") if user has past history */}
+        {pastOrderedProducts.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <RotateCcw className="w-4 h-4 text-orange-400" />
+              <h2 className="text-lg font-extrabold text-white">🔄 Order Again</h2>
+            </div>
+            <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-none">
+              {pastOrderedProducts.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="bg-slate-900 border border-slate-800 rounded-2xl p-3 min-w-[200px] max-w-[220px] shrink-0 space-y-2 flex flex-col justify-between"
+                >
+                  <div className="flex items-center space-x-3">
+                    <img
+                      src={prod.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=150&q=80"}
+                      alt={prod.name}
+                      className="w-12 h-12 rounded-xl object-cover shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">{prod.name}</h4>
+                      <p className="text-xs font-semibold text-orange-400">₹{prod.selling_price}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => addToCart(prod.id)}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-1.5 rounded-xl transition"
+                  >
+                    + Add to Cart
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Dynamic Time-Based Discovery Section */}
+        <section className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-xl">{timeGreeting.title.split(" ").slice(-1)[0]}</span>
+              <div>
+                <h3 className="text-lg font-bold text-white">{timeGreeting.period} Highlights</h3>
+                <p className="text-xs text-slate-400">{timeGreeting.subtitle}</p>
+              </div>
+            </div>
+            <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[11px] font-bold px-3 py-1 rounded-full hidden sm:block">
+              {timeGreeting.tag}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-2">
+            {timeHighlights.map((item) => (
+
+              <div
+                key={item.id}
+                className="bg-slate-950/80 border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3 space-y-3 transition flex flex-col justify-between group"
+              >
+                <div className="relative h-28 rounded-xl overflow-hidden bg-slate-900">
+                  <img
+                    src={item.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80"}
+                    alt={item.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                  />
+                  {item.mrp > item.selling_price && (
+                    <span className="absolute top-2 left-2 bg-orange-500 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                      {Math.round(((item.mrp - item.selling_price) / item.mrp) * 100)}% OFF
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white line-clamp-1">{item.name}</h4>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className="text-sm font-extrabold text-orange-400">₹{item.selling_price}</span>
+                    {item.mrp > item.selling_price && (
+                      <span className="text-xs text-slate-500 line-through">₹{item.mrp}</span>
+                    )}
+                  </div>
+                </div>
+
+                {cart[item.id] ? (
+                  <div className="flex items-center justify-between bg-orange-500 text-slate-950 rounded-xl p-1 font-bold text-xs">
+                    <button onClick={() => removeFromCart(item.id)} className="w-7 h-7 flex items-center justify-center hover:bg-orange-600 rounded-lg">
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span>{cart[item.id]}</span>
+                    <button onClick={() => addToCart(item.id)} className="w-7 h-7 flex items-center justify-center hover:bg-orange-600 rounded-lg">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => addToCart(item.id)}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl text-xs transition"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Search Experience & Quick Suggestion Chips */}
+        <section className="space-y-4" ref={menuSectionRef}>
+          <div className="relative">
+            <Search className="w-5 h-5 text-slate-400 absolute left-4 top-3.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search chicken biryani, burgers, momos, coffee, maggi, or 'under 50'..."
+              className={`w-full pl-12 pr-10 py-3.5 border focus:border-orange-500 rounded-2xl text-sm outline-none transition shadow-inner ${theme === "dark"
+                ? "bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-500"
+                : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 shadow-sm"
+                }`}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Search Chips */}
+          <div className="flex items-center space-x-2 overflow-x-auto pb-1 text-xs scrollbar-none">
+            <span className={`font-bold text-[11px] shrink-0 ${theme === "dark" ? "text-slate-500" : "text-slate-600"}`}>Try searching:</span>
+            {[
+              "Chicken Biryani",
+              "Burger",
+              "Momos",
+              "Pizza",
+              "Maggi",
+              "Coffee",
+              "Breakfast",
+              "Under ₹50",
+            ].map((chip) => (
+              <button
+                key={chip}
+                onClick={() => setSearchQuery(chip)}
+                className={`border px-3 py-1.5 rounded-full shrink-0 transition font-medium ${theme === "dark"
+                  ? "bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300"
+                  : "bg-white hover:bg-slate-100 border-slate-300 text-slate-700 shadow-sm"
+                  }`}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Food Category Navigation */}
+        <section className="space-y-4">
+          <div className="flex items-center space-x-2 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {foodCategoryList.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-4 py-2.5 rounded-2xl font-bold text-xs shrink-0 flex items-center space-x-2 border transition ${selectedCategory === cat.id
+                  ? "bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/20"
+                  : theme === "dark"
+                    ? "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
+                    : "bg-white text-slate-800 border-slate-300 hover:bg-slate-100 shadow-sm"
+                  }`}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.name}</span>
+              </button>
+            ))}
+
+            {/* Printing Tab Service */}
+            <button
+              onClick={() => setShowPrintingsModal(true)}
+              className="px-4 py-2.5 rounded-2xl font-bold text-xs shrink-0 flex items-center space-x-2 bg-orange-500 hover:bg-orange-600 text-slate-950 transition border border-orange-400 shadow-sm"
+            >
+              <Printer className="w-4 h-4 text-slate-950" />
+              <span>🖨️ Printing Service</span>
+            </button>
+          </div>
+        </section>
+
+        {/* Special Section: 🔥 Popular on Campus */}
+        {selectedCategory === "all" && !searchQuery && popularProducts.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Flame className="w-5 h-5 text-orange-500" />
+              <h3 className={`text-lg font-extrabold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>🔥 Popular on Campus</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {popularProducts.map((p, idx) => (
+                <div
+                  key={p.id}
+                  className={`border rounded-2xl p-3 flex flex-col justify-between space-y-3 shadow-sm ${theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+                    }`}
+                >
+                  <div className="relative h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950">
+                    <img src={p.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80"} alt={p.name} className="w-full h-full object-cover" />
+                    <span className="absolute top-2 left-2 bg-orange-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
+                      {idx === 0 ? "🔥 Bestseller" : idx === 1 ? "⭐ Student Favorite" : idx === 2 ? "⚡ Fast Delivery" : "💰 Best Value"}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className={`text-sm font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{p.name}</h4>
+                    <p className="text-sm font-extrabold text-orange-500 mt-1">₹{p.selling_price}</p>
+                  </div>
+                  {cart[p.id] ? (
+                    <div className="flex items-center justify-between bg-orange-500 text-slate-950 rounded-xl p-1 font-bold text-xs">
+                      <button onClick={() => removeFromCart(p.id)} className="w-7 h-7 flex items-center justify-center"><Minus className="w-3.5 h-3.5" /></button>
+                      <span>{cart[p.id]}</span>
+                      <button onClick={() => addToCart(p.id)} className="w-7 h-7 flex items-center justify-center"><Plus className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => addToCart(p.id)}
+                      className={`w-full font-bold py-2 rounded-xl text-xs transition ${theme === "dark"
+                        ? "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                        : "bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
+                        }`}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Special Section: 💰 Student Budget ("Under ₹50") */}
+        {selectedCategory === "all" && !searchQuery && budgetProducts.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Tag className="w-5 h-5 text-emerald-500" />
+              <h3 className={`text-lg font-extrabold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>💰 Student Budget — Everything under ₹50</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {budgetProducts.slice(0, 4).map((p) => (
+                <div
+                  key={p.id}
+                  className={`border rounded-2xl p-3 flex flex-col justify-between space-y-2 shadow-sm ${theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+                    }`}
+                >
+                  <h4 className={`text-xs font-bold line-clamp-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{p.name}</h4>
+                  <p className="text-xs font-extrabold text-emerald-500">₹{p.selling_price}</p>
+                  <button
+                    onClick={() => addToCart(p.id)}
+                    className={`w-full text-xs font-bold py-1.5 rounded-xl transition ${theme === "dark"
+                      ? "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                      }`}
+                  >
+                    + Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Main Product Catalog Grid */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className={`text-lg font-extrabold capitalize ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+              {selectedCategory === "all" ? "Full Food Menu" : selectedCategory} ({filteredProducts.length})
+            </h3>
+          </div>
+
+          {menuLoading ? (
+            <div className="flex items-center justify-center py-16 space-x-2 text-slate-400">
+              <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+              <span>Loading menu items...</span>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className={`border rounded-3xl p-12 text-center space-y-3 ${theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200 shadow-sm"
+              }`}>
+              <Utensils className="w-10 h-10 text-slate-400 mx-auto" />
+              <h4 className={`text-base font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>No products found</h4>
+              <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Try searching for something else or clearing filters.</p>
+              <button
+                onClick={() => { setSelectedCategory("all"); setSearchQuery(""); }}
+                className="bg-orange-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs mt-2"
+              >
+                Clear Search & Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredProducts.map((product: Product) => {
+                const isAdded = Boolean(cart[product.id]);
+                const qty = cart[product.id] || 0;
+                return (
+                  <div
+                    key={product.id}
+                    className={`border rounded-3xl p-4 flex flex-col justify-between space-y-4 transition duration-200 shadow-lg group ${theme === "dark"
+                      ? "bg-slate-900 border-slate-800/90 hover:border-slate-700"
+                      : "bg-white border-slate-200 hover:border-orange-300 shadow-md"
+                      }`}
+                  >
+                    <div className="relative h-40 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-950">
+                      <img
+                        src={product.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80"}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      />
+                      {product.mrp > product.selling_price && (
+                        <span className="absolute top-3 left-3 bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full shadow-md">
+                          SAVE ₹{Math.round(product.mrp - product.selling_price)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <h4 className={`font-extrabold text-base leading-snug line-clamp-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{product.name}</h4>
+                      <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>⚡ Hand-delivered in 15–20 mins</p>
+                      <div className="flex items-baseline space-x-2 pt-1">
+                        <span className="text-lg font-black text-orange-500">₹{product.selling_price}</span>
+                        {product.mrp > product.selling_price && (
+                          <span className="text-xs text-slate-400 line-through font-semibold">₹{product.mrp}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {isAdded ? (
+                      <div className="flex items-center justify-between bg-orange-500 text-slate-950 rounded-2xl p-1.5 font-black text-sm shadow-md">
+                        <button
+                          onClick={() => removeFromCart(product.id)}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-orange-600 rounded-xl transition"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span>{qty}</span>
+                        <button
+                          onClick={() => addToCart(product.id)}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-orange-600 rounded-xl transition"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => addToCart(product.id)}
+                        className={`w-full font-bold py-2.5 rounded-2xl text-xs flex items-center justify-center space-x-2 transition border ${theme === "dark"
+                          ? "bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700"
+                          : "bg-orange-500 hover:bg-orange-600 text-white border-orange-500 shadow-md"
+                          }`}
+                      >
+                        <Plus className="w-4 h-4 text-white" />
+                        <span>Add to Cart</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+      </main>
+
+      {/* Slide-over Persistent Cart Drawer */}
+      <AnimatePresence>
+        {isCartOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCartOpen(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+            />
+
+            {/* Cart Drawer Panel */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 250 }}
+              className="absolute inset-y-0 right-0 max-w-md w-full bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col justify-between"
+            >
+              {/* Cart Drawer Header */}
+              <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <ShoppingBag className="w-5 h-5 text-orange-400" />
+                  <h3 className="text-lg font-extrabold text-white">Your Campus Cart</h3>
+                  <span className="bg-slate-800 text-slate-300 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {getCartItemCount()} items
+                  </span>
+                </div>
+                <button
+                  onClick={() => setIsCartOpen(false)}
+                  className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Free Delivery Progress Bar */}
+              <div className="bg-slate-950/60 border-b border-slate-800 px-5 py-3 space-y-2">
+                <div className="flex justify-between text-xs font-bold">
+                  {getSubtotal() >= freeDeliveryThreshold ? (
+                    <span className="text-emerald-400">🎉 FREE DELIVERY UNLOCKED!</span>
+                  ) : (
+                    <span className="text-slate-300">
+                      🚚 Add ₹{freeDeliveryThreshold - getSubtotal()} more to unlock FREE DELIVERY
+                    </span>
+                  )}
+                  <span className="text-orange-400">₹{getSubtotal()} / ₹{freeDeliveryThreshold}</span>
+                </div>
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, (getSubtotal() / freeDeliveryThreshold) * 100)}%`,
+                    }}
+                  />
                 </div>
               </div>
 
-              {/* Menu grid */}
-              {menuLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 space-y-3">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                  <span className="text-xs text-slate-500 font-medium">
-                    Fetching canteen catalog...
-                  </span>
+              {/* Saved Address Info inside Cart */}
+              <div className="bg-slate-950/80 border-b border-slate-800 px-5 py-3 flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-2">
+                  <MapPin className="w-4 h-4 text-orange-400 shrink-0" />
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Delivering to floor corridor</span>
+                    <span className="font-bold text-white">{building}, Floor {floor}, Room {roomNumber || "Not Set"}</span>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {filteredProducts.map((p) => (
-                    <motion.div
-                      key={p.id}
-                      layout
-                      className="bg-white border border-slate-100 rounded-3xl p-4 flex items-center space-x-4 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group"
-                    >
-                      {isBestseller(p.name) && (
-                        <span className="absolute top-0 left-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold text-[8px] uppercase tracking-wider px-2 py-0.5 rounded-br-lg shadow-sm">
-                          Bestseller
-                        </span>
-                      )}
+                <button
+                  onClick={() => setShowAddressModal(true)}
+                  className="text-orange-400 hover:underline font-bold text-[11px]"
+                >
+                  Change
+                </button>
+              </div>
 
-                      <div className="w-20 h-20 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 relative border border-slate-150">
-                        <img
-                          src={p.image_url}
-                          alt={p.name}
-                          className="w-full h-full object-cover"
-                        />
-                        {!p.is_available && (
-                          <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
-                            <span className="text-[9px] uppercase tracking-wider font-bold text-slate-500">
-                              Sold Out
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center space-x-1.5 pt-1.5">
-                          <div
-                            className="w-3.5 h-3.5 border border-emerald-600 p-0.5 rounded flex items-center justify-center bg-white flex-shrink-0"
-                            title="Veg"
-                          >
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                          </div>
-                          <h4 className="font-extrabold text-sm text-slate-800 truncate leading-snug group-hover:text-orange-500 transition-colors">
-                            {p.name}
-                          </h4>
-                        </div>
-
-                        <div className="flex items-center space-x-2">
-                          <span className="text-orange-600 font-black text-sm">
-                            ₹{p.selling_price.toFixed(0)}
-                          </span>
-                          <span className="text-slate-400 line-through text-[10px]">
-                            ₹{p.mrp.toFixed(0)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center text-[10px] text-slate-500 font-bold space-x-1">
-                          <span className="text-amber-500">★</span>
-                          <span className="text-slate-700">
-                            {getRating(p.name).rate}
-                          </span>
-                          <span className="text-slate-400 font-normal">
-                            ({getRating(p.name).count}+ orders)
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        {cart[p.id] ? (
-                          <div className="flex items-center space-x-2 bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg">
-                            <button
-                              onClick={() => removeFromCart(p.id)}
-                              className="text-orange-600 hover:text-orange-700 font-extrabold text-sm px-1.5"
-                            >
-                              -
-                            </button>
-                            <span className="text-xs font-black text-orange-700 w-4 text-center">
-                              {cart[p.id]}
-                            </span>
-                            <button
-                              onClick={() => addToCart(p.id)}
-                              className="text-orange-600 hover:text-orange-700 font-extrabold text-sm px-1.5"
-                            >
-                              +
-                            </button>
-                          </div>
-                        ) : (
+              {/* Delivery Slot Selection */}
+              <div className="bg-slate-950/80 border-b border-slate-800 px-5 py-3">
+                <label className="text-xs font-bold text-slate-300 block mb-2">Select Delivery Slot</label>
+                <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {deliverySlots.filter((s) => s.is_active).length > 0 ? (
+                    deliverySlots
+                      .filter((s) => s.is_active)
+                      .map((slot) => {
+                        // Auto-select open slot if selectedSlotId is empty
+                        const openSlot = deliverySlots.find((s) => s.is_ordering_open && s.is_active);
+                        const isSelected = selectedSlotId === slot.id || (!selectedSlotId && openSlot?.id === slot.id);
+                        return (
                           <button
-                            onClick={() => addToCart(p.id)}
-                            disabled={!p.is_available}
-                            className="bg-white border border-orange-500 hover:bg-orange-500 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold text-orange-500 active:scale-95 disabled:opacity-50 transition"
+                            key={slot.id}
+                            onClick={() => setSelectedSlotId(slot.id)}
+                            disabled={!slot.is_ordering_open}
+                            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${isSelected
+                              ? "bg-orange-500 text-slate-950 border-orange-500"
+                              : slot.is_ordering_open
+                                ? "bg-slate-900 text-slate-300 border-slate-700 hover:border-orange-500/50"
+                                : "bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed"
+                              }`}
                           >
-                            Add
+                            <div className="flex flex-col items-center space-y-0.5">
+                              <span>{slot.name}</span>
+                              <span className="text-[10px] font-medium opacity-80">
+                                {slot.delivery_start} - {slot.delivery_end}
+                              </span>
+                              <span className="text-[9px] font-medium opacity-70 text-orange-200">
+                                Order before {slot.order_cutoff}
+                              </span>
+                            </div>
                           </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
+                        );
+                      })
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">No delivery slots available today.</span>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Sticky Order Panel / Cart view */}
-            <div ref={orderPanelRef} className="lg:col-span-1 scroll-mt-24">
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 sticky top-24 shadow-md">
-                <h3 className="text-lg font-black border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2 text-slate-900">
-                  <ShoppingBag className="w-5 h-5 text-orange-500" />
-                  <span>Order Placement</span>
-                </h3>
-
+              {/* Cart Items List */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {getCartItemCount() === 0 ? (
-                  <div className="text-center py-12 text-slate-500">
-                    <span className="block text-4xl mb-3">🛒</span>
-                    <p className="text-xs font-semibold">
-                      Your cart is empty.
-                    </p>
-                    <p className="text-[10px] text-slate-450 mt-1">
-                      Add meals or print jobs to continue.
-                    </p>
+                  <div className="text-center py-12 space-y-4">
+                    <ShoppingBasket className="w-12 h-12 text-slate-700 mx-auto" />
+                    <div>
+                      <h4 className="text-base font-bold text-white">Your cart is hungry!</h4>
+                      <p className="text-xs text-slate-400">Discover breakfast, biryani, meals & snacks.</p>
+                    </div>
+                    <button
+                      onClick={scrollToMenu}
+                      className="bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs"
+                    >
+                      Explore Menu
+                    </button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {/* Cart Items list */}
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {Object.entries(cart).map(([id, qty]) => {
-                        const prod = products.find((p) => p.id === id);
-                        if (!prod) return null;
-                        return (
-                          <div
-                            key={id}
-                            className="flex justify-between items-center text-xs"
-                          >
-                            <span className="text-slate-650 truncate max-w-[120px]">
-                              {prod.name} x {qty}
-                            </span>
-                            <span className="font-semibold text-slate-800">
-                              ₹{(prod.selling_price * qty).toFixed(0)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {printJobs.map((job) => (
+                  <>
+                    {/* Food Items */}
+                    {Object.entries(cart).map(([prodId, qty]) => {
+                      const prod = products.find((p) => p.id === prodId);
+                      if (!prod) return null;
+                      return (
                         <div
-                          key={job.localId}
-                          className="flex justify-between items-start text-xs gap-2"
+                          key={prodId}
+                          className="bg-slate-950 border border-slate-800 rounded-2xl p-3 flex items-center justify-between space-x-3"
                         >
-                          <div className="min-w-0 flex-1">
-                            <span className="text-slate-700 font-semibold truncate block">
-                              🖨️ {job.file_name}
-                            </span>
-                            <span className="text-[10px] text-slate-500">
-                              {job.color_mode === "bw" ? "B&W" : "Color"} ·{" "}
-                              {job.sides} · {job.page_count}p ×{job.copies}
-                            </span>
+                          <img
+                            src={prod.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=150&q=80"}
+                            alt={prod.name}
+                            className="w-14 h-14 rounded-xl object-cover shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-xs font-bold text-white truncate">{prod.name}</h5>
+                            <p className="text-xs font-extrabold text-orange-400">₹{prod.selling_price * qty}</p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-semibold text-slate-800">
-                              ₹{job.line_total.toFixed(0)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => removePrintJob(job.localId)}
-                              className="text-red-500 hover:text-red-600"
-                              title="Remove print job"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
+                          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl p-1">
+                            <button onClick={() => removeFromCart(prodId)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white">
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="text-xs font-bold text-white px-1">{qty}</span>
+                            <button onClick={() => addToCart(prodId)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white">
+                              <Plus className="w-3.5 h-3.5" />
                             </button>
                           </div>
+                          <button onClick={() => deleteItemFromCart(prodId)} className="text-slate-500 hover:text-red-400 p-1">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
 
-                    <div className="border-t border-slate-150 pt-3 flex justify-between items-center text-xs font-bold">
-                      <span className="text-slate-500">Running Total:</span>
-                      <span className="text-orange-655 font-black text-sm text-orange-600">
-                        ₹{getCartTotal().toFixed(2)}
-                      </span>
-                    </div>
-
-                    {/* Room Details Form */}
-                    <div className="border-t border-slate-150 pt-4 space-y-3">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                        Corridor Delivery Address
-                      </span>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[9px] font-bold text-slate-455">
-                            Block
-                          </label>
-                          <select
-                            value={building}
-                            onChange={(e) => setBuilding(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 outline-none focus:bg-white focus:border-orange-500"
-                          >
-                            <option>N Block</option>
-                            <option>A Block</option>
-                            <option>H Block</option>
-                            <option>U Block</option>
-                            <option>Lara</option>
-                            <option>Pharmacy</option>
-                          </select>
-                          <span className="text-[8px] text-red-500 font-bold block mt-0.5 leading-none">
-                            we are accepting orders from N block only. We will
-                            available soon for other blocks.
-                          </span>
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold text-slate-455">
-                            Floor
-                          </label>
-                          <select
-                            value={floor}
-                            onChange={(e) => setFloor(Number(e.target.value))}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 outline-none focus:bg-white focus:border-orange-500"
-                          >
-                            {[0, 1, 2, 3, 4, 5, 6].map((f) => (
-                              <option key={f} value={f}>
-                                {f === 0 ? "Ground" : `${f}nd Floor`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-450">
-                          Room Number
-                        </label>
-                        <input
-                          type="text"
-                          value={roomNumber}
-                          onChange={(e) => setRoomNumber(e.target.value)}
-                          placeholder="Room 214"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-850 outline-none focus:bg-white focus:border-orange-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-455 block mb-1.5">
-                          Delivery Slot
-                        </label>
-                        {deliverySlots.length === 0 ? (
-                          <p className="text-[10px] text-slate-500 font-semibold">
-                            No delivery slots configured yet.
+                    {/* Print Jobs */}
+                    {printJobs.map((job) => (
+                      <div
+                        key={job.localId}
+                        className="bg-indigo-950/40 border border-indigo-800/80 rounded-2xl p-3 flex items-center justify-between space-x-3"
+                      >
+                        <Printer className="w-8 h-8 text-indigo-400 shrink-0" />
+                        <div className="flex-1 min-w-0 text-xs">
+                          <h5 className="font-bold text-white truncate">{job.file_name}</h5>
+                          <p className="text-[11px] text-slate-400">
+                            {job.page_count} pages • {job.color_mode.toUpperCase()} • {job.copies} copies
                           </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {deliverySlots.map((slot) => {
-                              const closed = !slot.is_ordering_open;
-                              return (
-                                <label
-                                  key={slot.id}
-                                  className={`flex items-start gap-2 rounded-xl border p-2.5 cursor-pointer transition ${
-                                    closed
-                                      ? "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
-                                      : selectedSlotId === slot.id
-                                        ? "bg-orange-50 border-orange-400"
-                                        : "bg-slate-50 border-slate-200 hover:border-orange-300"
-                                  }`}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="delivery_slot"
-                                    value={slot.id}
-                                    checked={selectedSlotId === slot.id}
-                                    disabled={closed}
-                                    onChange={() => setSelectedSlotId(slot.id)}
-                                    className="mt-0.5"
-                                  />
-                                  <span className="min-w-0">
-                                    <span className="block text-xs font-bold text-slate-800">
-                                      {slot.name}
-                                      {closed ? " (Closed)" : ""}
-                                    </span>
-                                    <span className="block text-[10px] text-slate-500 font-semibold">
-                                      Delivery {slot.delivery_start} –{" "}
-                                      {slot.delivery_end}
-                                    </span>
-                                    <span className="block text-[10px] text-orange-600 font-semibold">
-                                      Order before {slot.order_cutoff}
-                                    </span>
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
+                          <p className="font-extrabold text-indigo-300">₹{job.line_total}</p>
+                        </div>
+                        <button onClick={() => removePrintJob(job.localId)} className="text-slate-500 hover:text-red-400 p-1">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
+                    ))}
 
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-455">
-                          Cooking Notes
-                        </label>
-                        <input
-                          type="text"
-                          value={specialInstructions}
-                          onChange={(e) =>
-                            setSpecialInstructions(e.target.value)
-                          }
-                          placeholder="Extra spicy, no cutlery"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-850 outline-none focus:bg-white focus:border-orange-500"
-                        />
+                    {/* Recommendations inside Cart ("Complete your meal") */}
+                    <div className="pt-4 border-t border-slate-800 space-y-3">
+                      <h5 className="text-xs font-extrabold text-white flex items-center space-x-1">
+                        <span>Complete your meal 😋</span>
+                      </h5>
+                      <div className="grid grid-cols-2 gap-2">
+                        {products.slice(0, 2).map((rec) => (
+                          <div key={rec.id} className="bg-slate-950 border border-slate-800 rounded-xl p-2 flex items-center justify-between text-xs">
+                            <div className="truncate pr-1">
+                              <span className="font-bold text-white block truncate">{rec.name}</span>
+                              <span className="text-orange-400 font-bold">₹{rec.selling_price}</span>
+                            </div>
+                            <button
+                              onClick={() => addToCart(rec.id)}
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px] px-2 py-1 rounded-lg shrink-0"
+                            >
+                              + Add
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
+                  </>
+                )}
+              </div>
 
+              {/* Cart Drawer Footer & Checkout */}
+              {getCartItemCount() > 0 && (
+                <div className="p-5 border-t border-slate-800 bg-slate-950 space-y-3">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Subtotal</span>
+                      <span>₹{getSubtotal()}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Corridor Delivery Fee</span>
+                      <span>{currentDeliveryFee === 0 ? "FREE" : `₹${currentDeliveryFee}`}</span>
+                    </div>
+
+                    <div className="flex justify-between text-base font-extrabold text-white pt-2 border-t border-slate-800">
+                      <span>Total Amount</span>
+                      <span className="text-orange-400">₹{getFinalTotal()}</span>
+                    </div>
+                  </div>
+
+                  {/* Cutoff / Maintenance Warning Banner above Proceed to Pay */}
+                  {is0001CutoffMode ? (
+                    <div className="p-4 bg-gradient-to-br from-orange-950/80 via-amber-950/70 to-slate-900 border border-orange-500/40 rounded-2xl text-center space-y-2 shadow-xl backdrop-blur-sm">
+                      <div className="font-black text-sm text-orange-400 flex items-center justify-center gap-1.5">
+                        <span>🚀 Something BIG is Cooking!</span>
+                      </div>
+                      <p className="text-xs text-slate-200 font-medium leading-relaxed">
+                        We&apos;re taking a short break today to bring you something even better.
+                        <br />
+                        CampusBites will be back tomorrow! ❤️
+                      </p>
+                      <p className="text-[11px] text-amber-300 font-bold italic pt-0.5">
+                        Stay tuned — we&apos;ve got something special coming your way. 🔥
+                      </p>
+                    </div>
+                  ) : isOrderingClosed ? (
+                    <div className="p-3.5 bg-red-950/60 border border-red-500/40 rounded-2xl text-center shadow-lg">
+                      <span className="text-xs font-bold text-red-300 block leading-relaxed">
+                        🌙 Ordering is closed right now! All delivery slots for today have passed their cutoff time. Please check back tomorrow morning.
+                      </span>
+                    </div>
+                  ) : null}
+
+                  <div className="flex space-x-2">
                     <button
-                      onClick={proceedToConsent}
-                      disabled={
-                        checkoutLoading ||
-                        !roomNumber ||
-                        building !== "N Block" ||
-                        !selectedSlotId ||
-                        !deliverySlots.some(
-                          (s) => s.id === selectedSlotId && s.is_ordering_open,
-                        ) ||
-                        (cutoffTime !== null && countdownSeconds === null)
-                      }
-                      className="w-full mt-2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-orange-500/20 active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={scrollToMenu}
+                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs border border-slate-700 transition"
+                    >
+                      + Add More Items
+                    </button>
+                    <button
+                      onClick={handleCheckout}
+                      disabled={checkoutLoading || is0001CutoffMode || isOrderingClosed}
+                      className={`w-1/2 font-extrabold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-lg transition ${
+                        is0001CutoffMode || isOrderingClosed
+                          ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
+                          : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950"
+                      }`}
                     >
                       {checkoutLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <>
-                          <span>Check Out & Pay</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </>
+                        <span>Proceed to Pay</span>
                       )}
                     </button>
-                    {cutoffTime !== null && countdownSeconds === null && (
-                      <span className="text-[10px] text-red-500 font-extrabold block text-center mt-2 leading-tight">
-                        Ordering has closed for today at {cutoffTime}. No new
-                        orders can be placed.
-                      </span>
-                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Privacy Policy Modal */}
-      <AnimatePresence>
-        {showPrivacyModal && (
-          <div className="fixed inset-0 z-[60] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl"
-            >
-              <h2 className="text-xl font-black text-slate-900 mb-3">Privacy Policy</h2>
-              <div className="text-sm text-slate-600 space-y-3 mb-5">
-                <p>We take your privacy seriously. Here is what you should know:</p>
-                <ul className="list-disc pl-5 space-y-1.5">
-                  <li>We <strong>only deliver your order</strong> — we do not prepare food.</li>
-                  <li>Your phone number is used <strong>solely for delivery coordination</strong> and will <strong>not</strong> be used for promotions or shared with third parties.</li>
-                  <li>Your ID card data is used only for identity verification and is stored securely.</li>
-                </ul>
-                <p>
-                  Read our full{" "}
-                  <a href="/privacy-policy" target="_blank" className="text-orange-600 underline font-semibold">
-                    Privacy Policy
-                  </a>
-                  .
-                </p>
-              </div>
-              <label className="flex items-center space-x-3 cursor-pointer mb-5">
-                <input
-                  type="checkbox"
-                  checked={privacyChecked}
-                  onChange={(e) => setPrivacyChecked(e.target.checked)}
-                  className="w-5 h-5 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
-                />
-                <span className="text-sm text-slate-700 font-medium">I have read and agree to the Privacy Policy</span>
-              </label>
-              <button
-                onClick={handleAcceptPrivacy}
-                disabled={!privacyChecked || privacyLoading}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {privacyLoading ? "Accepting..." : "Accept & Continue"}
-              </button>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Consent Modal Overlay */}
+      {/* Saved Location Modal */}
       <AnimatePresence>
-        {showConsentModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative select-none"
-            >
-              <button
-                onClick={() => setShowConsentModal(false)}
-                className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-full transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <h2 className="text-xl sm:text-2xl font-black text-slate-800 mb-6 flex items-center space-x-2">
-                <Shield className="w-6 h-6 text-orange-500" />
-                <span>Confirm Your Order</span>
-              </h2>
-
-              <div className="space-y-4 mb-6">
-                <label className="flex items-start space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(consentChecks[0])}
-                    onChange={(e) => updateConsentCheck(0, e.target.checked)}
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
-                  />
-                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
-                    This is in intial stages so, Please be ready at the Old Lift steps side in the floor you mentioned..
-                  </span>
-                </label>
-
-                <label className="flex items-start space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(consentChecks[1])}
-                    onChange={(e) => updateConsentCheck(1, e.target.checked)}
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
-                  />
-                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
-                    Your delivary will be brought by developers and Engineers of this website...so <i> Give Respect, Take Orders</i>
-                  </span>
-                </label>
-
-                <label className="flex items-start space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(consentChecks[2])}
-                    onChange={(e) => updateConsentCheck(2, e.target.checked)}
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-blue-600"
-                  />
-                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
-                    We are on mission to solve problems in our own University, as a &quot;Give away&quot;
-                  </span>
-                </label>
-
-                <label className="flex items-start space-x-3 cursor-pointer rounded-xl border border-orange-200 bg-orange-50/80 p-3">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(consentChecks[3])}
-                    onChange={(e) => handleNotificationConsent(e.target.checked)}
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-orange-500"
-                  />
-                  <span className="text-sm text-slate-700 font-semibold leading-relaxed">
-                    <span className="inline-flex items-center gap-1.5 text-orange-600 font-black mb-1">
-                      <Bell className="w-4 h-4" />
-                      Allow notifications (required each order)
-                    </span>
-                    <span className="block">
-                      When your browser asks, tap <b>Allow</b> for live order updates and a better experience — status, delivery, and print-ready alerts.
-                    </span>
-                  </span>
-                </label>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Please type <span className="text-indigo-600 font-black">&quot;ok dev&quot;</span> to confirm
-                </label>
-                <input
-                  type="text"
-                  value={consentInput}
-                  onChange={(e) => setConsentInput(e.target.value)}
-                  onPaste={(e) => e.preventDefault()}
-                  placeholder="ok dev"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 font-bold outline-none focus:bg-white focus:border-indigo-500 transition-colors text-center"
-                />
-              </div>
-              <div className="mb-6">
-                <p className="text-[10px] text-red-500 font-bold text-center bg-red-50 p-2 rounded-lg border border-red-100">
-                  Note: We allow only paid orders by UPI. If you don't have UPI, use other methods and make payment. We take pre-paid orders only.
-                </p>
-              </div>
-              <button
-                onClick={executeOrderPlacement}
-                disabled={
-                  !consentChecks[0] ||
-                  !consentChecks[1] ||
-                  !consentChecks[2] ||
-                  !consentChecks[3] ||
-                  consentInput.toLowerCase() !== "ok dev" ||
-                  checkoutLoading
-                }
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black py-4 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center space-x-2"
-              >
-                {checkoutLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <ShoppingBag className="w-5 h-5" />
-                    <span>Proceed to Pay</span>
-                  </>
-                )}
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Printings Modal */}
-      <AnimatePresence>
-        {showPrintingsModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
-            >
-              <button
-                onClick={() => setShowPrintingsModal(false)}
-                className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-full transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <h2 className="text-xl font-black text-slate-800 mb-1 flex items-center space-x-2">
-                <Printer className="w-6 h-6 text-orange-500" />
-                <span>Printings</span>
-              </h2>
-              <p className="text-xs text-slate-500 mb-5">
-                Upload files — page count is detected automatically, then add to cart.
-              </p>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Upload files
-                  </label>
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpeg,.jpg,.png,application/pdf,image/jpeg,image/png"
-                    onChange={handlePrintFilesSelected}
-                    disabled={printUploading || printCounting}
-                    className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-600 file:font-bold"
-                  />
-                  {(printUploading || printCounting) && (
-                    <p className="text-[10px] text-orange-500 mt-1 flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" />{" "}
-                      {printUploading && printCounting
-                        ? "Uploading & counting pages…"
-                        : printCounting
-                          ? "Counting pages…"
-                          : "Uploading…"}
-                    </p>
-                  )}
-                  {printDraftFiles.length > 0 && (
-                    <ul className="mt-2 space-y-1">
-                      {printDraftFiles.map((f, i) => (
-                        <li
-                          key={`${f.file_url}-${i}`}
-                          className="text-xs text-slate-700 bg-slate-50 rounded-lg px-2 py-1.5 flex justify-between gap-2 items-center"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <span className="truncate block">{f.file_name}</span>
-                            <span className="text-[10px] text-slate-500">
-                              {f.source === "office"
-                                ? `Est. ${f.estimated} + 2 buffer = ${f.page_count} pages`
-                                : `${f.page_count} page${f.page_count === 1 ? "" : "s"}`}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            className="text-red-500 shrink-0"
-                            onClick={() =>
-                              setPrintDraftFiles((prev) =>
-                                prev.filter((_, idx) => idx !== i),
-                              )
-                            }
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Color mode
-                    </label>
-                    <select
-                      value={printColorMode}
-                      onChange={(e) =>
-                        setPrintColorMode(e.target.value as PrintColorMode)
-                      }
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
-                    >
-                      <option value="bw">Black &amp; White</option>
-                      <option value="color">Color</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Sides
-                    </label>
-                    <select
-                      value={printSides}
-                      onChange={(e) =>
-                        setPrintSides(e.target.value as PrintSides)
-                      }
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
-                    >
-                      <option value="single">Single sided</option>
-                      <option value="double">Double sided</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Page count
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={getDraftPageTotal() || ""}
-                      disabled
-                      readOnly
-                      placeholder="—"
-                      className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs text-slate-600 outline-none cursor-not-allowed"
-                    />
-                    <p className="text-[9px] text-slate-500 mt-1 leading-snug">
-                      {printDraftFiles.length === 0
-                        ? "Filled automatically after upload"
-                        : pageCountHint(draftPageSource())}
-                      {printDraftFiles.some((f) => f.source === "office") &&
-                        draftPageSource() !== "office" &&
-                        " · Office files include +2 buffer"}
-                      {" · "}
-                      Double-sided is charged per sheet (ceil of pages ÷ 2) at
-                      the double rate.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Copies
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={printCopies}
-                      onChange={(e) =>
-                        setPrintCopies(Math.max(1, Number(e.target.value) || 1))
-                      }
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500"
-                    />
-                  </div>
-                </div>
-
-                {printPricing && (
-                  <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs space-y-1">
-                    <div className="flex justify-between text-slate-600">
-                      <span>
-                        {printSides === "double" ? "Rate / sheet" : "Rate / page"}
-                      </span>
-                      <span className="font-bold text-slate-800">
-                        ₹
-                        {rateForPrintOptions(
-                          printPricing,
-                          printColorMode,
-                          printSides,
-                        ).toFixed(2)}
-                      </span>
-                    </div>
-                    {printDraftFiles.length > 0 && (
-                      <div className="flex justify-between text-slate-600">
-                        <span>
-                          {printSides === "double"
-                            ? "Billable sheets"
-                            : "Billable pages"}
-                        </span>
-                        <span className="font-bold text-slate-800 text-right">
-                          {printSides === "double" ? (
-                            <>
-                              {getDraftBillableUnits()} sheets (from{" "}
-                              {getDraftPageTotal()} pages) × {printCopies}{" "}
-                              copies
-                            </>
-                          ) : (
-                            <>
-                              {getDraftPageTotal()} × {printCopies} copies
-                            </>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-black text-orange-600">
-                      <span>Preview total</span>
-                      <span>₹{getPrintPreviewTotal().toFixed(2)}</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 pt-1">
-                      B&amp;W ₹{printPricing.bw_single}/{printPricing.bw_double} ·
-                      Color ₹{printPricing.color_single}/
-                      {printPricing.color_double} (single/double)
-                    </p>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={addPrintJobsToCart}
-                  disabled={
-                    printUploading ||
-                    printCounting ||
-                    printDraftFiles.length === 0 ||
-                    getDraftPageTotal() <= 0 ||
-                    printCopies <= 0
-                  }
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center space-x-2"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>Add to Cart</span>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Live Camera Scanner Overlay Modal */}
-      <AnimatePresence>
-        {showCamera && (
-          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
-            <style
-              dangerouslySetInnerHTML={{
-                __html: `
-              @keyframes scan-laser {
-                0% { top: 5%; }
-                100% { top: 95%; }
-              }
-            `,
-              }}
-            />
+        {showAddressModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col space-y-6"
+              className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-3xl p-4 md:p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
             >
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">
-                  College ID Scanner
-                </span>
-                <button
-                  onClick={stopCamera}
-                  className="text-slate-450 hover:text-white font-bold text-sm"
-                >
-                  ✕
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-white">Saved Delivery Location</h3>
+                <button onClick={() => setShowAddressModal(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Video container with target framing guide overlay */}
-              <div className="relative rounded-2xl overflow-hidden border border-slate-700 bg-black aspect-video flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Building / Hostel Block</label>
+                  <select
+                    value={building}
+                    onChange={(e) => setBuilding(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none"
+                  >
+                    <option value="N Block">N Block</option>
+                    <option value="A Block">A Block</option>
+                    <option value="H Block">H Block</option>
+                    <option value="U Block">U Block</option>
+                    <option value="Lara">Lara</option>
+                    <option value="Pharmacy">Pharmacy</option>
 
-                {/* Laser scan line simulation */}
-                <div
-                  className="absolute left-0 right-0 h-0.5 bg-green-400 shadow-md shadow-green-400/85 pointer-events-none"
-                  style={{
-                    top: "10%",
-                    animation: "scan-laser 2s ease-in-out infinite alternate",
-                  }}
-                />
+                  </select>
+                </div>
 
-                {/* Frame border guidelines overlay */}
-                <div className="absolute inset-4 border-2 border-dashed border-green-500/60 rounded-xl pointer-events-none flex flex-col items-center justify-between py-6">
-                  <div className="text-[10px] text-green-400 font-extrabold uppercase bg-slate-950/80 px-2 py-0.5 rounded shadow">
-                    Align ID Card Here
-                  </div>
-                  <div className="text-[9px] text-slate-400 bg-slate-950/80 px-2.5 py-1 rounded text-center max-w-[200px] leading-tight">
-                    Ensure name and registration number are readable
-                  </div>
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Floor Number</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    value={floor}
+                    onChange={(e) => setFloor(parseInt(e.target.value, 10) || 0)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Room Number</label>
+                  <input
+                    type="text"
+                    value={roomNumber}
+                    onChange={(e) => setRoomNumber(e.target.value)}
+                    placeholder="501"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none"
+                  />
                 </div>
               </div>
 
-              <div className="flex space-x-3">
+              <button
+                onClick={() => saveDeliveryAddress(building, floor, roomNumber)}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs shadow-md"
+              >
+                Save Delivery Location
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Printing Modal */}
+      <AnimatePresence>
+        {showPrintingsModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-indigo-900/60 max-w-lg w-full rounded-3xl p-4 md:p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-2">
+                  <Printer className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-lg font-bold text-white">Campus Printing Service</h3>
+                </div>
+                <button onClick={() => setShowPrintingsModal(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-4 text-center space-y-2">
+                  <p className="text-indigo-300 font-bold">Upload PDF or Document File</p>
+                  <p className="text-slate-400 text-[11px]">Accepted: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</p>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    onChange={handlePrintFilesSelected}
+                    className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"
+                  />
+                  {printUploading && (
+                    <div className="flex items-center justify-center space-x-2 text-indigo-300 text-xs">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Processing file & calculating pages...</span>
+                    </div>
+                  )}
+                </div>
+
+                {printDraftFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {printDraftFiles.map((file, idx) => (
+                      <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-200 truncate max-w-[200px]">{file.file_name}</span>
+                        <span className="bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                          {file.page_count} Pages
+                        </span>
+                      </div>
+                    ))}
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div>
+                        <label className="block text-slate-400 font-bold mb-1">Color Mode</label>
+                        <select
+                          value={printColorMode}
+                          onChange={(e) => setPrintColorMode(e.target.value as PrintColorMode)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200"
+                        >
+                          <option value="bw">B&W (Black & White)</option>
+                          <option value="color">Color</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-bold mb-1">Sides</label>
+                        <select
+                          value={printSides}
+                          onChange={(e) => setPrintSides(e.target.value as PrintSides)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200"
+                        >
+                          <option value="single">Single Sided</option>
+                          <option value="double">Double Sided</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-between items-center border-t border-slate-800">
+                      <span className="font-bold text-slate-300">Total Print Price:</span>
+                      <span className="text-lg font-black text-indigo-400">₹{getPrintPreviewTotal()}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={addPrintJobsToCart}
+                disabled={printDraftFiles.length === 0 || printUploading}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-xs disabled:opacity-40 shadow-md"
+              >
+                Add Print Jobs to Cart
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Order History & Ratings/Reviews Modal */}
+      <AnimatePresence>
+        {showHistoryModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 max-w-2xl w-full rounded-3xl p-4 md:p-6 space-y-5 shadow-2xl max-h-[90vh] flex flex-col"
+            >
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Clock className="w-5 h-5 text-orange-400" />
+                  <h3 className="text-lg font-bold text-white">Order History & Reviews</h3>
+                </div>
+                <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                {orderHistory.length === 0 ? (
+                  <div className="text-center py-10 text-slate-500 text-xs">
+                    No past orders found. Start ordering from the menu!
+                  </div>
+                ) : (
+                  orderHistory.map((ord) => (
+                    <div key={ord.id} className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-wider block">
+                            Order #{ord.order_number}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            {new Date(ord.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <span className="bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
+                          {ord.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded-xl">
+                        {ord.items && ord.items.map((it: any, i: number) => (
+                          <div key={i} className="flex justify-between">
+                            <span>{it.quantity}x {it.product_name || "Food Item"}</span>
+                            <span className="font-bold text-slate-400">₹{it.price * it.quantity}</span>
+                          </div>
+                        ))}
+                        <div className="pt-1.5 border-t border-slate-800 flex justify-between font-extrabold text-white">
+                          <span>Total Amount</span>
+                          <span className="text-orange-400">₹{ord.total_amount}</span>
+                        </div>
+                      </div>
+
+                      {/* Rating & Review Action */}
+                      {ord.status === "delivered" && (
+                        <div className="pt-1 flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">Feedback:</span>
+                          <button
+                            onClick={() => {
+                              setRatingModalOrderID(ord.id);
+                              setReviewRating(5);
+                              setReviewText("");
+                            }}
+                            className="bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 text-xs font-bold px-3 py-1 rounded-xl transition flex items-center space-x-1"
+                          >
+                            <span>⭐ Rate & Review Order</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 1-5 Star Review Submission Modal */}
+      <AnimatePresence>
+        {ratingModalOrderID && (
+          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-3xl p-4 md:p-6 space-y-4 shadow-2xl text-center max-h-[90vh] overflow-y-auto"
+            >
+              <h3 className="text-lg font-bold text-white">Rate your Meal Experience</h3>
+              <p className="text-xs text-slate-400">How was your CampusBites food & floor delivery?</p>
+
+              {/* Star Selector */}
+              <div className="flex justify-center space-x-2 py-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="text-2xl transition transform hover:scale-125"
+                  >
+                    {star <= reviewRating ? "⭐" : "☆"}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                placeholder="Write your review here (optional)..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 outline-none h-24 resize-none"
+              />
+
+              <div className="flex space-x-2">
                 <button
                   type="button"
-                  onClick={stopCamera}
-                  className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-350 font-bold py-3 rounded-xl text-xs uppercase"
+                  onClick={() => setRatingModalOrderID(null)}
+                  className="w-1/3 bg-slate-800 text-slate-400 font-bold py-2.5 rounded-xl text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={capturePhoto}
-                  className="flex-1 bg-indigo-650 hover:bg-indigo-600 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider shadow-md shadow-indigo-600/20 active:scale-95 transition"
+                  disabled={reviewSubmitting}
+                  onClick={async () => {
+                    if (!ratingModalOrderID) return;
+                    try {
+                      setReviewSubmitting(true);
+                      await studentApi.submitReview(ratingModalOrderID, reviewRating, reviewText);
+                      alert("Thank you for your rating & review! 🌟");
+                      setRatingModalOrderID(null);
+                      fetchOrderHistory();
+                    } catch (e: any) {
+                      alert("Failed to submit review: " + e.message);
+                    } finally {
+                      setReviewSubmitting(false);
+                    }
+                  }}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs"
                 >
-                  Capture Card
+                  {reviewSubmitting ? "Submitting..." : "Submit Rating"}
                 </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+      {/* Support Helpdesk FAB */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end space-y-4">
+        <AnimatePresence>
+          {showSupport && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.9 }}
+              className={`rounded-3xl p-5 shadow-2xl border w-80 origin-bottom-right transition-colors ${theme === "dark" ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-100 text-slate-900"}`}
+            >
+              <div className={`flex items-center space-x-3 mb-5 border-b pb-4 ${theme === "dark" ? "border-slate-800" : "border-slate-100"}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${theme === "dark" ? "bg-orange-500/20 text-orange-400" : "bg-orange-50 text-orange-500"}`}>
+                  <Star className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg leading-tight">Support Helpdesk</h3>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>CampusBites Customer Care</p>
+                </div>
+              </div>
 
-      {/* Floating Support Helpdesk FAB & Cart FAB Stack */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col-reverse items-end gap-3">
-        {/* Support FAB - keep current headphones button + popup (unchanged behavior) */}
-        <div className="relative">
-          <AnimatePresence>
-            {showSupport && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute bottom-16 right-0 w-72 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 space-y-4 text-slate-800 z-50"
-              >
-                <div className="flex items-center space-x-2.5 border-b border-slate-100 pb-3">
-                  <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
-                    <Star className="w-5 h-5 animate-spin-slow" />
-                  </div>
+              <div className="space-y-3">
+                <a href="mailto:sdsameer1609@gmail.com" className={`flex items-center space-x-4 p-3 rounded-2xl border transition cursor-pointer ${theme === "dark" ? "border-slate-800 hover:border-orange-500/50 hover:bg-orange-500/10" : "border-slate-100 hover:border-orange-200 hover:bg-orange-50/50"}`}>
+                  <Mail className={`w-5 h-5 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`} />
                   <div>
-                    <h4 className="font-extrabold text-sm text-slate-900">
-                      Support Helpdesk
-                    </h4>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                      CampusBites Customer Care
-                    </span>
+                    <p className={`text-[10px] font-bold uppercase ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Send Email</p>
+                    <p className="font-bold text-sm">sdsameer1609@gmail.com</p>
                   </div>
-                </div>
-                <div className="space-y-3">
-                  <a
-                    href="mailto:sdsameer1609@gmail.com"
-                    className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-slate-100/50"
-                  >
-                    <span className="text-lg">✉️</span>
-                    <div>
-                      <span className="text-[9px] text-slate-500 font-bold uppercase block">
-                        Send Email
-                      </span>
-                      <span className="text-xs font-bold text-slate-800 break-all">
-                        sdsameer1609@gmail.com
-                      </span>
-                    </div>
-                  </a>
-                  <a
-                    href="tel:+917386055404"
-                    className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-slate-100/50"
-                  >
-                    <span className="text-lg">📞</span>
-                    <div>
-                      <span className="text-[9px] text-slate-500 font-bold uppercase block">
-                        Call Support
-                      </span>
-                      <span className="text-xs font-bold text-slate-800 font-mono">
-                        +91 7386055404
-                      </span>
-                    </div>
-                  </a>
-                </div>
-                <p className="text-[9px] text-slate-500 text-center font-medium leading-relaxed">
-                  Contact us for any delivery delay or payment query.
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                </a>
 
-          <button
-            onClick={() => setShowSupport(!showSupport)}
-            className="w-14 h-14 bg-gradient-to-tr from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-orange-500/30 transition transform hover:scale-105 active:scale-95"
-            title="Customer Care Support"
-          >
-            {showSupport ? (
-              <span className="text-xl font-bold">✕</span>
-            ) : (
-              <Headphones className="w-6 h-6 text-white" />
-            )}
-          </button>
-        </div>
+                <a href="tel:+917386055404" className={`flex items-center space-x-4 p-3 rounded-2xl border transition cursor-pointer ${theme === "dark" ? "border-slate-800 hover:border-orange-500/50 hover:bg-orange-500/10" : "border-slate-100 hover:border-orange-200 hover:bg-orange-50/50"}`}>
+                  <Phone className="w-5 h-5 text-red-500 fill-red-500" />
+                  <div>
+                    <p className={`text-[10px] font-bold uppercase ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Call Support</p>
+                    <p className="font-bold text-sm">+91 7386055404</p>
+                  </div>
+                </a>
+              </div>
 
-        {/* Cart FAB — render only when isLoggedIn && getCartItemCount() > 0 */}
-        {isLoggedIn && getCartItemCount() > 0 && (
-          <button
-            onClick={scrollToOrderPanel}
-            className="relative w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-orange-500/30 transition transform hover:scale-105 active:scale-95 animate-pulse"
-            title="View Cart & Checkout"
-          >
-            {/* Soft ping ring */}
-            <span className="absolute inset-0 rounded-full bg-orange-500 animate-ping opacity-25" />
-            <ShoppingBag className="w-6 h-6" />
-            <span className="absolute -top-1 -right-1 bg-amber-400 w-5.5 h-5.5 rounded-full border border-white flex items-center justify-center text-[10px] font-black text-slate-900 shadow">
-              {getCartItemCount()}
-            </span>
-          </button>
-        )}
+              <p className={`text-center text-[11px] font-medium mt-5 ${theme === "dark" ? "text-slate-500" : "text-slate-500"}`}>
+                Contact us for any delivery delay or payment query.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          onClick={() => setShowSupport(!showSupport)}
+          className="w-14 h-14 bg-orange-500 hover:bg-orange-600 rounded-full shadow-lg shadow-orange-500/40 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+        >
+          {showSupport ? (
+            <X className="w-6 h-6 text-white" />
+          ) : (
+            <Headphones className="w-6 h-6 text-white" />
+          )}
+        </button>
       </div>
     </div>
   );
 }
+

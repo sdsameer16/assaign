@@ -1,18 +1,12 @@
 -- CampusBites Database Schema (PostgreSQL)
 
--- Drop types if they exist
-DROP TYPE IF EXISTS verification_status CASCADE;
-DROP TYPE IF EXISTS confidence_level CASCADE;
-DROP TYPE IF EXISTS order_status CASCADE;
-DROP TYPE IF EXISTS payment_status CASCADE;
-DROP TYPE IF EXISTS admin_role CASCADE;
+-- Create Types safely without dropping
+DO $$ BEGIN CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE confidence_level AS ENUM ('high', 'medium', 'low'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE order_status AS ENUM ('received', 'preparing', 'packed', 'assigned', 'out_for_delivery', 'delivered', 'cancelled', 'out_of_stock'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('created', 'paid', 'failed', 'refunded'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE admin_role AS ENUM ('super_admin', 'staff'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- Create Types
-CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected');
-CREATE TYPE confidence_level AS ENUM ('high', 'medium', 'low');
-CREATE TYPE order_status AS ENUM ('received', 'preparing', 'packed', 'assigned', 'out_for_delivery', 'delivered', 'cancelled', 'out_of_stock');
-CREATE TYPE payment_status AS ENUM ('created', 'paid', 'failed', 'refunded');
-CREATE TYPE admin_role AS ENUM ('super_admin', 'staff');
 
 -- 1. Students Table
 CREATE TABLE IF NOT EXISTS students (
@@ -29,7 +23,7 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 -- Create index on mobile number for rapid lookup on logins
-CREATE INDEX idx_students_mobile ON students(mobile_number);
+CREATE INDEX IF NOT EXISTS idx_students_mobile ON students(mobile_number);
 
 -- 2. Student Documents Table (Admin-only access)
 CREATE TABLE IF NOT EXISTS student_documents (
@@ -87,9 +81,9 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_orders_student ON orders(student_id);
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_orders_delivery_slot ON orders(delivery_slot_id);
+CREATE INDEX IF NOT EXISTS idx_orders_student ON orders(student_id);
+-- CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+-- CREATE INDEX IF NOT EXISTS idx_orders_delivery_slot ON orders(delivery_slot_id);
 
 -- 7. Order Items Table
 CREATE TABLE IF NOT EXISTS order_items (
@@ -126,7 +120,7 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_print_jobs_order ON print_jobs(order_id);
+CREATE INDEX IF NOT EXISTS idx_print_jobs_order ON print_jobs(order_id);
 
 -- 7d. Tracking advertisement (singleton)
 CREATE TABLE IF NOT EXISTS tracking_ad (
@@ -149,7 +143,7 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_payments_order ON payments(order_id);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
 
 -- 9. Delivery Partners Table
 CREATE TABLE IF NOT EXISTS delivery_partners (
@@ -173,7 +167,7 @@ CREATE TABLE IF NOT EXISTS delivery_assignments (
     delivery_notes TEXT
 );
 
-CREATE INDEX idx_delivery_assignments_partner ON delivery_assignments(delivery_partner_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_assignments_partner ON delivery_assignments(delivery_partner_id);
 
 -- 11. Order Status History Table
 CREATE TABLE IF NOT EXISTS order_status_history (
@@ -204,3 +198,85 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     user_agent TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 14. Carts Table (Persistent cart per student)
+CREATE TABLE IF NOT EXISTS carts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID UNIQUE NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 15. Cart Items Table
+CREATE TABLE IF NOT EXISTS cart_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cart_id UUID NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    quantity INT NOT NULL CHECK (quantity > 0),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_cart_product UNIQUE (cart_id, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cart_items_cart ON cart_items(cart_id);
+
+-- 16. Order Reviews Table (Rating & Reviews)
+CREATE TABLE IF NOT EXISTS order_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID UNIQUE NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    review TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_reviews_student ON order_reviews(student_id);
+
+-- 17. Delivery Config Table (Dynamic admin delivery rates)
+CREATE TABLE IF NOT EXISTS delivery_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 15.00,
+    min_free_delivery_amount DECIMAL(10,2) NOT NULL DEFAULT 100.00,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 18. Menu Schedules Table (Admin dynamic time-based category menu schedule)
+CREATE TABLE IF NOT EXISTS menu_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    is_enabled BOOLEAN DEFAULT TRUE,
+    display_order INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 19. Menu Schedule Categories Junction Table
+CREATE TABLE IF NOT EXISTS menu_schedule_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    schedule_id UUID NOT NULL REFERENCES menu_schedules(id) ON DELETE CASCADE,
+    category_id UUID NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    display_order INT DEFAULT 0,
+    CONSTRAINT unique_schedule_category UNIQUE (schedule_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_menu_schedule_categories_schedule ON menu_schedule_categories(schedule_id);
+
+-- Seed default menu schedules if empty
+INSERT INTO menu_schedules (name, start_time, end_time, is_enabled, display_order)
+SELECT 'Morning Specials', '08:00:00'::TIME, '11:00:00'::TIME, TRUE, 1
+WHERE NOT EXISTS (SELECT 1 FROM menu_schedules WHERE name = 'Morning Specials');
+
+INSERT INTO menu_schedules (name, start_time, end_time, is_enabled, display_order)
+SELECT 'Afternoon Lunch', '11:00:00'::TIME, '15:00:00'::TIME, TRUE, 2
+WHERE NOT EXISTS (SELECT 1 FROM menu_schedules WHERE name = 'Afternoon Lunch');
+
+INSERT INTO menu_schedules (name, start_time, end_time, is_enabled, display_order)
+SELECT 'Evening Cravings', '15:00:00'::TIME, '19:00:00'::TIME, TRUE, 3
+WHERE NOT EXISTS (SELECT 1 FROM menu_schedules WHERE name = 'Evening Cravings');
+
+INSERT INTO menu_schedules (name, start_time, end_time, is_enabled, display_order)
+SELECT 'Night Cravings', '19:00:00'::TIME, '23:00:00'::TIME, TRUE, 4
+WHERE NOT EXISTS (SELECT 1 FROM menu_schedules WHERE name = 'Night Cravings');
+
+
+

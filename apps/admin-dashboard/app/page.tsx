@@ -28,9 +28,28 @@ import {
   MessageSquare,
   Printer,
   ImageIcon,
+  Sun,
+  Moon,
+  Calendar,
+  GripVertical,
+  Trash,
+  FileText,
+  Filter,
+  Download,
+  Truck,
+  Building2,
+  DollarSign,
+  Receipt,
+  ExternalLink,
+  ChevronDown,
+  Hash,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { adminApi, getToken, getProfile, logout, setSession } from "../lib/api";
+import { MenuSchedule } from "@campusbites/types";
 import { uploadAdImage } from "../lib/cloudinary";
+
 
 export default function AdminDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -43,10 +62,13 @@ export default function AdminDashboard() {
   // Active view tab
   const [activeTab, setActiveTab] = useState<
     | "orders"
+    | "history"
     | "pickups"
     | "overview"
     | "products"
+    | "menu-schedule"
     | "slots"
+    | "delivery-config"
     | "print-pricing"
     | "tracking-ad"
     | "students"
@@ -54,6 +76,23 @@ export default function AdminDashboard() {
     | "logs"
     | "notifications"
   >("orders");
+
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [menuSchedules, setMenuSchedules] = useState<MenuSchedule[]>([]);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [newScheduleName, setNewScheduleName] = useState("");
+  const [newScheduleStart, setNewScheduleStart] = useState("08:00");
+  const [newScheduleEnd, setNewScheduleEnd] = useState("11:00");
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("admin_theme", next);
+    }
+  };
+
+
 
   // Inspection states
   const [inspectedStudent, setInspectedStudent] = useState<any>(null);
@@ -121,9 +160,15 @@ export default function AdminDashboard() {
   const [printColorDouble, setPrintColorDouble] = useState("10");
   const [printPricingSaving, setPrintPricingSaving] = useState(false);
 
+  // Dynamic delivery config
+  const [deliveryFee, setDeliveryFee] = useState("15");
+  const [minFreeDeliveryAmount, setMinFreeDeliveryAmount] = useState("100");
+  const [deliveryConfigSaving, setDeliveryConfigSaving] = useState(false);
+
   // Tracking advertisement
   const [trackingAdEnabled, setTrackingAdEnabled] = useState(false);
   const [trackingAdImageUrl, setTrackingAdImageUrl] = useState("");
+
   const [trackingAdUploading, setTrackingAdUploading] = useState(false);
   const [trackingAdSaving, setTrackingAdSaving] = useState(false);
 
@@ -143,6 +188,23 @@ export default function AdminDashboard() {
   // Search parameters
   const [studentSearch, setStudentSearch] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
+
+  // Detailed Order Receipt Inspector Modal
+  const [inspectedOrder, setInspectedOrder] = useState<any>(null);
+
+  // Dispatch Desk Filters
+  const [dispatchStatusFilter, setDispatchStatusFilter] = useState<string>("all");
+  const [dispatchBuildingFilter, setDispatchBuildingFilter] = useState<string>("all");
+  const [dispatchSlotFilter, setDispatchSlotFilter] = useState<string>("all");
+
+  // Order History Filters
+  const [historySearch, setHistorySearch] = useState<string>("");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<string>("all");
+  const [historyDateFilter, setHistoryDateFilter] = useState<string>("all");
+  const [historyBuildingFilter, setHistoryBuildingFilter] = useState<string>("all");
+  const [historySlotFilter, setHistorySlotFilter] = useState<string>("all");
+  const [historyCourierFilter, setHistoryCourierFilter] = useState<string>("all");
+  const [historyViewMode, setHistoryViewMode] = useState<"table" | "cards">("table");
 
   // Loading indicators
   const [dataLoading, setDataLoading] = useState(false);
@@ -201,6 +263,17 @@ export default function AdminDashboard() {
     }
   };
 
+  const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
+
+  const fetchMenuSchedules = async () => {
+    try {
+      const data = await adminApi.getMenuSchedules();
+      setMenuSchedules(data || []);
+    } catch (e) {
+      console.error("Failed to load menu schedules:", e);
+    }
+  };
+
   const fetchAllData = async () => {
     try {
       setDataLoading(true);
@@ -212,12 +285,15 @@ export default function AdminDashboard() {
       const catData = await adminApi.getCategories();
       setCategories(catData || []);
 
+      await fetchMenuSchedules();
+
       try {
         const slotData = await adminApi.getDeliverySlots();
         setDeliverySlots(slotData || []);
       } catch (e) {
         console.error("Failed to load delivery slots:", e);
       }
+
 
       try {
         const pricing = await adminApi.getPrintPricing();
@@ -228,6 +304,15 @@ export default function AdminDashboard() {
       } catch (e) {
         console.error("Failed to load print pricing:", e);
       }
+
+      try {
+        const config = await adminApi.getDeliveryConfig();
+        setDeliveryFee(String(config.delivery_fee));
+        setMinFreeDeliveryAmount(String(config.min_free_delivery_amount));
+      } catch (e) {
+        console.error("Failed to load delivery config:", e);
+      }
+
 
       try {
         const ad = await adminApi.getTrackingAd();
@@ -441,7 +526,27 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSaveDeliveryConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fee = Number(deliveryFee);
+    const minFree = Number(minFreeDeliveryAmount);
+    if (isNaN(fee) || fee < 0 || isNaN(minFree) || minFree < 0) {
+      showToast("Please enter valid delivery fee and free delivery threshold amounts.", "error");
+      return;
+    }
+    try {
+      setDeliveryConfigSaving(true);
+      await adminApi.updateDeliveryConfig(fee, minFree);
+      showToast(`Delivery settings saved: Fee ₹${fee}, Free delivery above ₹${minFree}`, "success");
+    } catch (err: any) {
+      showToast("Failed to save delivery config: " + err.message, "error");
+    } finally {
+      setDeliveryConfigSaving(false);
+    }
+  };
+
   const handleSavePrintPricing = async (e: React.FormEvent) => {
+
     e.preventDefault();
     const bw_single = Number(printBwSingle);
     const bw_double = Number(printBwDouble);
@@ -556,6 +661,113 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newScheduleName.trim() || !newScheduleStart || !newScheduleEnd) {
+      showToast("Name, start time, and end time are required.", "error");
+      return;
+    }
+    try {
+      setScheduleSaving(true);
+      await adminApi.createMenuSchedule({
+        name: newScheduleName.trim(),
+        start_time: newScheduleStart,
+        end_time: newScheduleEnd,
+        is_enabled: true,
+        display_order: menuSchedules.length + 1,
+        category_ids: [],
+      });
+      showToast("Menu schedule created successfully.", "success");
+      setNewScheduleName("");
+      setShowAddScheduleModal(false);
+      fetchMenuSchedules();
+    } catch (err: any) {
+      showToast(err.message || "Failed to create schedule", "error");
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleToggleScheduleActive = async (schedule: MenuSchedule) => {
+    try {
+      const catIDs = schedule.categories?.map((c) => c.category_id) || [];
+      await adminApi.updateMenuSchedule(schedule.id, {
+        name: schedule.name,
+        start_time: schedule.start_time,
+        end_time: schedule.end_time,
+        is_enabled: !schedule.is_enabled,
+        display_order: schedule.display_order,
+        category_ids: catIDs,
+      });
+      showToast(`Schedule ${!schedule.is_enabled ? "enabled" : "disabled"}.`, "success");
+      fetchMenuSchedules();
+    } catch (err: any) {
+      showToast(err.message || "Failed to update schedule status", "error");
+    }
+  };
+
+  const handleDeleteSchedule = async (scheduleId: string) => {
+    if (confirm("Are you sure you want to delete this menu schedule?")) {
+      try {
+        await adminApi.deleteMenuSchedule(scheduleId);
+        showToast("Schedule deleted.", "success");
+        fetchMenuSchedules();
+      } catch (err: any) {
+        showToast(err.message || "Failed to delete schedule", "error");
+      }
+    }
+  };
+
+  const handleAddCategoryToSchedule = async (scheduleId: string, categoryId: string) => {
+    const schedule = menuSchedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const existingCatIDs = schedule.categories?.map((c) => c.category_id) || [];
+    if (existingCatIDs.includes(categoryId)) return;
+
+    const updatedCatIDs = [...existingCatIDs, categoryId];
+
+    try {
+      await adminApi.updateMenuSchedule(schedule.id, {
+        name: schedule.name,
+        start_time: schedule.start_time,
+        end_time: schedule.end_time,
+        is_enabled: schedule.is_enabled,
+        display_order: schedule.display_order,
+        category_ids: updatedCatIDs,
+      });
+      showToast("Category assigned to schedule.", "success");
+      fetchMenuSchedules();
+    } catch (err: any) {
+      showToast(err.message || "Failed to assign category", "error");
+    }
+  };
+
+  const handleRemoveCategoryFromSchedule = async (scheduleId: string, categoryId: string) => {
+    const schedule = menuSchedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const updatedCatIDs = (schedule.categories || [])
+      .filter((c) => c.category_id !== categoryId)
+      .map((c) => c.category_id);
+
+    try {
+      await adminApi.updateMenuSchedule(schedule.id, {
+        name: schedule.name,
+        start_time: schedule.start_time,
+        end_time: schedule.end_time,
+        is_enabled: schedule.is_enabled,
+        display_order: schedule.display_order,
+        category_ids: updatedCatIDs,
+      });
+      showToast("Category removed from schedule.", "success");
+      fetchMenuSchedules();
+    } catch (err: any) {
+      showToast(err.message || "Failed to remove category", "error");
+    }
+  };
+
+
   const handleAssignPartner = async (orderId: string, partnerId: string) => {
     if (!partnerId) return;
     try {
@@ -638,6 +850,142 @@ export default function AdminDashboard() {
     }
   };
 
+  // Workload helper for courier active assigned orders
+  const getCourierActiveWorkload = (partnerId: string, partnerName: string) => {
+    return orders.filter(
+      (o) =>
+        (o.delivery_partner_id === partnerId || o.delivery_partner_name === partnerName) &&
+        o.status !== "delivered" &&
+        o.status !== "cancelled" &&
+        o.status !== "out_of_stock"
+    ).length;
+  };
+
+  // CSV Export for Order History
+  const exportHistoryCSV = () => {
+    if (filteredHistoryOrders.length === 0) {
+      showToast("No orders found matching the filters to export.", "error");
+      return;
+    }
+    const headers = [
+      "Order Number",
+      "Date",
+      "Student Name",
+      "Phone",
+      "Building",
+      "Room",
+      "Floor",
+      "Delivery Slot",
+      "Items Summary",
+      "Print Jobs Summary",
+      "Total Amount (INR)",
+      "Order Status",
+      "Payment Status",
+      "Assigned Courier"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...filteredHistoryOrders.map((o) =>
+        [
+          `"${o.order_number}"`,
+          `"${new Date(o.created_at).toLocaleString()}"`,
+          `"${(o.student_name || "").replace(/"/g, '""')}"`,
+          `"${o.student_phone || ""}"`,
+          `"${o.building || ""}"`,
+          `"${o.room_number || ""}"`,
+          `"${o.floor}"`,
+          `"${(o.slot_name || "").replace(/"/g, '""')}"`,
+          `"${(o.items_summary || "").replace(/"/g, '""')}"`,
+          `"${(o.print_jobs_summary || "").replace(/"/g, '""')}"`,
+          o.total_amount,
+          `"${o.status}"`,
+          `"${o.payment_status || "paid"}"`,
+          `"${(o.delivery_partner_name || "").replace(/"/g, '""')}"`
+        ].join(",")
+      )
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `CampusBites_Order_History_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Order history exported to CSV.", "success");
+  };
+
+  // Thermal/Invoice Print Slip Helper
+  const handlePrintReceipt = (order: any) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showToast("Please allow popups to print order receipt.", "error");
+      return;
+    }
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>CampusBites Receipt #${order.order_number}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; font-size: 12px; padding: 20px; max-width: 420px; margin: 0 auto; color: #111; line-height: 1.4; }
+            .header { text-align: center; border-bottom: 2px dashed #333; padding-bottom: 12px; margin-bottom: 12px; }
+            .brand { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; }
+            .sub { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+            .row { display: flex; justify-content: space-between; margin: 5px 0; }
+            .bold { font-weight: 800; }
+            .divider { border-top: 1px dashed #ccc; margin: 10px 0; }
+            .item-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+            .item-table th { text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+            .item-table td { padding: 4px 0; font-size: 11px; }
+            .total-box { font-size: 16px; font-weight: 900; background: #f4f4f5; padding: 8px 12px; border-radius: 6px; margin-top: 10px; }
+            .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #eee; pt: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="brand">CAMPUSBITES</div>
+            <div class="sub">Official Canteen Dispatch Ticket</div>
+            <div style="margin-top:6px; font-weight:bold; font-size: 14px;">Order #${order.order_number}</div>
+            <div style="font-size: 10px; color: #666;">${new Date(order.created_at).toLocaleString()}</div>
+          </div>
+          <div class="row"><span>Customer:</span><span class="bold">${order.student_name || "Student"}</span></div>
+          <div class="row"><span>Phone:</span><span>${order.student_phone || "-"}</span></div>
+          <div class="row"><span>Address:</span><span class="bold">Room ${order.room_number}, ${order.building} (Floor ${order.floor})</span></div>
+          <div class="row"><span>Time Window:</span><span class="bold">${order.slot_name ? `${order.slot_name} (${order.slot_delivery_start}-${order.slot_delivery_end})` : "Instant"}</span></div>
+          <div class="divider"></div>
+          
+          <div class="bold" style="margin-bottom: 6px; font-size: 11px;">FOOD ITEMS PREPARATION:</div>
+          <div>${(order.items_summary || "No food items").split(', ').map((it: string) => `• <strong>${it}</strong>`).join('<br/>')}</div>
+          
+          ${order.print_jobs_summary ? `
+            <div class="divider"></div>
+            <div class="bold" style="margin-bottom: 6px; font-size: 11px; color: #b45309;">PRINT DOCUMENTS ATTACHED:</div>
+            <div>${order.print_jobs_summary}</div>
+          ` : ""}
+          
+          <div class="divider"></div>
+          <div class="row total-box"><span>GRAND TOTAL:</span><span>₹${order.total_amount.toFixed(0)}</span></div>
+          <div class="row" style="margin-top: 8px;"><span>Payment Status:</span><span class="bold" style="color:#059669;">${(order.payment_status || "paid").toUpperCase()}</span></div>
+          <div class="row"><span>Assigned Courier:</span><span class="bold">${order.delivery_partner_name || "Pending Assignment"}</span></div>
+          <div class="row"><span>Order Status:</span><span class="bold">${order.status.replace(/_/g, ' ').toUpperCase()}</span></div>
+          
+          <div class="footer">
+            Fast Campus Delivery System • CampusBites Operations<br/>
+            Printed: ${new Date().toLocaleString()}
+          </div>
+          <script>
+            window.onload = function() { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   // Searching filters
   const filteredStudents = students.filter(
     (s) =>
@@ -645,12 +993,79 @@ export default function AdminDashboard() {
       s.roll_number.toLowerCase().includes(studentSearch.toLowerCase()),
   );
 
-  const filteredOrders = orders.filter(
-    (o) =>
+  // Dispatch Desk Filtered Orders
+  const filteredDispatchOrders = orders.filter((o) => {
+    // Basic Search Filter
+    const matchesSearch =
+      !orderSearch ||
       o.order_number.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.room_number.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.student_name.toLowerCase().includes(orderSearch.toLowerCase()),
-  );
+      (o.student_name && o.student_name.toLowerCase().includes(orderSearch.toLowerCase())) ||
+      (o.student_phone && o.student_phone.includes(orderSearch));
+
+    // Status Filter
+    const matchesStatus =
+      dispatchStatusFilter === "all" || o.status === dispatchStatusFilter;
+
+    // Building Filter
+    const matchesBuilding =
+      dispatchBuildingFilter === "all" || o.building === dispatchBuildingFilter;
+
+    // Slot Filter
+    const matchesSlot =
+      dispatchSlotFilter === "all" || o.delivery_slot_id === dispatchSlotFilter || o.slot_name === dispatchSlotFilter;
+
+    return matchesSearch && matchesStatus && matchesBuilding && matchesSlot;
+  });
+
+  // History Filtered Orders (Searchable Archive)
+  const filteredHistoryOrders = orders.filter((o) => {
+    // Text search
+    const matchesSearch =
+      !historySearch ||
+      o.order_number.toLowerCase().includes(historySearch.toLowerCase()) ||
+      o.room_number.toLowerCase().includes(historySearch.toLowerCase()) ||
+      (o.student_name && o.student_name.toLowerCase().includes(historySearch.toLowerCase())) ||
+      (o.student_phone && o.student_phone.includes(historySearch)) ||
+      (o.items_summary && o.items_summary.toLowerCase().includes(historySearch.toLowerCase()));
+
+    // Status filter
+    const matchesStatus =
+      historyStatusFilter === "all" || o.status === historyStatusFilter;
+
+    // Date filter
+    let matchesDate = true;
+    if (historyDateFilter !== "all") {
+      const orderDate = new Date(o.created_at);
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (historyDateFilter === "today") {
+        matchesDate = orderDate >= todayStart;
+      } else if (historyDateFilter === "yesterday") {
+        const yestStart = new Date(todayStart.getTime() - 86400000);
+        matchesDate = orderDate >= yestStart && orderDate < todayStart;
+      } else if (historyDateFilter === "this_week") {
+        const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
+        matchesDate = orderDate >= weekStart;
+      }
+    }
+
+    // Building filter
+    const matchesBuilding =
+      historyBuildingFilter === "all" || o.building === historyBuildingFilter;
+
+    // Slot filter
+    const matchesSlot =
+      historySlotFilter === "all" || o.delivery_slot_id === historySlotFilter || o.slot_name === historySlotFilter;
+
+    // Courier filter
+    const matchesCourier =
+      historyCourierFilter === "all" ||
+      o.delivery_partner_id === historyCourierFilter ||
+      o.delivery_partner_name === historyCourierFilter;
+
+    return matchesSearch && matchesStatus && matchesDate && matchesBuilding && matchesSlot && matchesCourier;
+  });
 
   const pickupOrders = orders.filter(
     (o) =>
@@ -747,11 +1162,16 @@ export default function AdminDashboard() {
             <nav className="flex md:flex-col p-4 space-x-1.5 md:space-x-0 md:space-y-1.5 overflow-x-auto md:overflow-visible scrollbar-none">
               {[
                 { id: "orders", label: "Dispatch Desk", icon: ShoppingBag },
+                { id: "history", label: "Order History", icon: FileText },
                 { id: "pickups", label: "Counter Pickups", icon: Clock },
                 { id: "overview", label: "Overview Metrics", icon: TrendingUp },
                 { id: "products", label: "Product Catalog", icon: Layers },
+                { id: "menu-schedule", label: "Menu Schedule", icon: Calendar },
                 { id: "slots", label: "Delivery Slots", icon: Clock },
+
+                { id: "delivery-config", label: "Delivery Settings", icon: Sparkles },
                 { id: "print-pricing", label: "Print Pricing", icon: Printer },
+
                 { id: "tracking-ad", label: "Tracking Ad", icon: ImageIcon },
                 { id: "students", label: "Verification Queue", icon: Users },
                 {
@@ -952,9 +1372,216 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {/* Tab: Menu Schedule (Time-Based Category Map) */}
+              {activeTab === "menu-schedule" && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h3 className="text-xl font-black tracking-tight text-white flex items-center space-x-2">
+                        <span>🗓️ Menu Schedule & Time-Based Category Map</span>
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Configure which food categories appear during Morning, Lunch, Evening, and Night windows.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setNewScheduleName("");
+                        setNewScheduleStart("08:00");
+                        setNewScheduleEnd("11:00");
+                        setShowAddScheduleModal(true);
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-indigo-500/20 transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Time Slot</span>
+                    </button>
+                  </div>
+
+                  {/* Add Schedule Modal Overlay */}
+                  {showAddScheduleModal && (
+                    <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
+                      <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4"
+                      >
+                        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                          <h4 className="font-extrabold text-base text-white">Create Menu Schedule Slot</h4>
+                          <button
+                            onClick={() => setShowAddScheduleModal(false)}
+                            className="text-slate-400 hover:text-white"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleCreateSchedule} className="space-y-4">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                              Schedule Window Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={newScheduleName}
+                              onChange={(e) => setNewScheduleName(e.target.value)}
+                              placeholder="e.g. Late Night Munchies"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                Start Time
+                              </label>
+                              <input
+                                type="time"
+                                required
+                                value={newScheduleStart}
+                                onChange={(e) => setNewScheduleStart(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                End Time
+                              </label>
+                              <input
+                                type="time"
+                                required
+                                value={newScheduleEnd}
+                                onChange={(e) => setNewScheduleEnd(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="pt-2 flex justify-end space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowAddScheduleModal(false)}
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={scheduleSaving}
+                              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-bold"
+                            >
+                              {scheduleSaving ? "Saving..." : "Create Slot"}
+                            </button>
+                          </div>
+                        </form>
+                      </motion.div>
+                    </div>
+                  )}
+
+                  {/* Live Schedules Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {menuSchedules.map((schedule) => (
+                      <div
+                        key={schedule.id}
+                        className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-extrabold text-base text-white">{schedule.name}</h4>
+                              <span
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                  schedule.is_enabled
+                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                    : "bg-slate-800 text-slate-400"
+                                }`}
+                              >
+                                {schedule.is_enabled ? "Active" : "Disabled"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-indigo-400 font-mono mt-0.5">
+                              ⏰ {schedule.start_time} — {schedule.end_time}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleToggleScheduleActive(schedule)}
+                              className="text-xs text-slate-400 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg transition"
+                            >
+                              {schedule.is_enabled ? "Disable" : "Enable"}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSchedule(schedule.id)}
+                              className="text-slate-400 hover:text-red-400 p-1.5 rounded-lg transition"
+                            >
+                              <Trash className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                            Assigned Food Categories:
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {schedule.categories && schedule.categories.length > 0 ? (
+                              schedule.categories.map((cat) => (
+                                <span
+                                  key={cat.category_id}
+                                  className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1.5"
+                                >
+                                  <span>{cat.category_name}</span>
+                                  <button
+                                    onClick={() => handleRemoveCategoryFromSchedule(schedule.id, cat.category_id)}
+                                    className="text-slate-400 hover:text-red-400 ml-1"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </span>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-500 italic">No categories assigned to this window yet.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Category Selector */}
+                        <div className="pt-2 border-t border-slate-800 flex items-center space-x-2">
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAddCategoryToSchedule(schedule.id, e.target.value);
+                                e.target.value = "";
+                              }
+                            }}
+                            defaultValue=""
+                            className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500 flex-1"
+                          >
+                            <option value="" disabled>
+                              + Assign Category to {schedule.name}...
+                            </option>
+                            {categories
+                              .filter((c) => !schedule.categories?.some((sc) => sc.category_id === c.id))
+                              .map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Tab 2: Product Catalog CRUD */}
               {activeTab === "products" && (
                 <div className="space-y-6">
+
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg font-black text-white">
                       Food Menu Inventory
@@ -1501,9 +2128,68 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+               {activeTab === "delivery-config" && (
+                <div className="space-y-6 max-w-xl">
+                  <div>
+                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-indigo-400" />
+                      Dynamic Delivery Settings
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Set standard delivery fees and minimum cart amounts required to qualify for free delivery.
+                    </p>
+                  </div>
+                  <form
+                    onSubmit={handleSaveDeliveryConfig}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4"
+                  >
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          Standard Delivery Fee (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={deliveryFee}
+                          onChange={(e) => setDeliveryFee(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          Free Delivery Minimum (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={minFreeDeliveryAmount}
+                          onChange={(e) => setMinFreeDeliveryAmount(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={deliveryConfigSaving}
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {deliveryConfigSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Save Delivery Settings"
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
               {activeTab === "print-pricing" && (
                 <div className="space-y-6 max-w-xl">
                   <div>
+
                     <h3 className="text-lg font-black text-white flex items-center gap-2">
                       <Printer className="w-5 h-5 text-indigo-400" />
                       Print Pricing
@@ -1820,44 +2506,202 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Tab 4: Orders Dispatch Desk */}
+              {/* Tab 4: Orders Logistics & Dispatch Desk */}
               {activeTab === "orders" && (
                 <div className="space-y-6">
-                  {/* Action row with partner onboard button */}
+                  {/* Top Header Row */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
-                    <div className="flex items-center space-x-4">
-                      <h3 className="text-lg font-black text-white">
-                        Logistics & Dispatch Desk
+                    <div>
+                      <h3 className="text-xl font-black tracking-tight text-white flex items-center space-x-2">
+                        <Truck className="w-5 h-5 text-indigo-400" />
+                        <span>Logistics & Dispatch Desk</span>
                       </h3>
-                      <button
-                        onClick={() => setShowAddPartner(true)}
-                        className="bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-350 text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Delivery Courier</span>
-                      </button>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Real-time canteen order dispatch pipeline, active courier workload management, and hostel corridor batching.
+                      </p>
                     </div>
 
-                    <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      <input
-                        type="text"
-                        value={orderSearch}
-                        onChange={(e) => setOrderSearch(e.target.value)}
-                        placeholder="Search order or room..."
-                        className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs outline-none text-white focus:border-indigo-500"
-                      />
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => setShowAddPartner(true)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Onboard Courier</span>
+                      </button>
+                      <button
+                        onClick={fetchOrders}
+                        className="bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 text-xs px-3 py-2 rounded-xl flex items-center space-x-1.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Refresh Feed</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dispatch KPI Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Pending Assignment
+                      </span>
+                      <span className="text-2xl font-black text-amber-400">
+                        {orders.filter((o) => (o.status === "received" || o.status === "preparing" || o.status === "packed") && !o.delivery_partner_name).length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        In Prep / Packing
+                      </span>
+                      <span className="text-2xl font-black text-indigo-400">
+                        {orders.filter((o) => o.status === "preparing" || o.status === "packed").length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        En Route (Out)
+                      </span>
+                      <span className="text-2xl font-black text-teal-400">
+                        {orders.filter((o) => o.status === "out_for_delivery" || o.status === "assigned").length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Counter Pickups Waiting
+                      </span>
+                      <span className="text-2xl font-black text-rose-400">
+                        {pickupOrders.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Live Courier Roster & Active Workload Bar */}
+                  {partners.length > 0 && (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                          <Users className="w-3.5 h-3.5 text-teal-400" />
+                          <span>Active Delivery Couriers Workload:</span>
+                        </span>
+                        <span className="text-[10px] text-teal-400 font-bold">
+                          {partners.filter(p => p.is_online).length} Online / {partners.length} Onboarded
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {partners.map((partner) => {
+                          const workload = getCourierActiveWorkload(partner.id, partner.name);
+                          return (
+                            <div
+                              key={partner.id}
+                              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-2 ${
+                                partner.is_online
+                                  ? workload > 3
+                                    ? "bg-amber-950/40 border-amber-500/30 text-amber-300"
+                                    : "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
+                                  : "bg-slate-950 border-slate-800 text-slate-500"
+                              }`}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${partner.is_online ? "bg-emerald-400" : "bg-slate-600"}`} />
+                              <span>{partner.name}</span>
+                              <span className="bg-slate-950 px-1.5 py-0.5 rounded text-[10px] border border-slate-800">
+                                {workload} active
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Filter Toolbar */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      {/* Search Bar */}
+                      <div className="relative flex-1 w-full">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        <input
+                          type="text"
+                          value={orderSearch}
+                          onChange={(e) => setOrderSearch(e.target.value)}
+                          placeholder="Search order number, student name, phone, room..."
+                          className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs outline-none text-white focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* Dropdown filters */}
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        {/* Hostel Building Filter */}
+                        <select
+                          value={dispatchBuildingFilter}
+                          onChange={(e) => setDispatchBuildingFilter(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                        >
+                          <option value="all">🏢 All Hostel Blocks</option>
+                          <option value="N Block">N Block</option>
+                          <option value="A Block">A Block</option>
+                          <option value="H Block">H Block</option>
+                          <option value="U Block">U Block</option>
+                          <option value="Lara">Lara</option>
+                          <option value="Pharmacy">Pharmacy</option>
+                        </select>
+
+                        {/* Delivery Slot Filter */}
+                        <select
+                          value={dispatchSlotFilter}
+                          onChange={(e) => setDispatchSlotFilter(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                        >
+                          <option value="all">⏰ All Delivery Slots</option>
+                          {deliverySlots.map((slot) => (
+                            <option key={slot.id} value={slot.id}>
+                              {slot.name} ({slot.delivery_start}–{slot.delivery_end})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Quick Status Filter Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                        Status Filter:
+                      </span>
+                      {[
+                        { id: "all", label: "All Orders" },
+                        { id: "received", label: "Received" },
+                        { id: "preparing", label: "Preparing" },
+                        { id: "packed", label: "Packed" },
+                        { id: "out_for_delivery", label: "Out for Delivery" },
+                        { id: "delivered", label: "Delivered" },
+                        { id: "out_of_stock", label: "Out of Stock" },
+                        { id: "cancelled", label: "Cancelled" },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setDispatchStatusFilter(tab.id)}
+                          className={`text-xs font-extrabold px-3 py-1 rounded-xl transition ${
+                            dispatchStatusFilter === tab.id
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
                   {/* Dispatch desk cards */}
-                  {filteredOrders.length === 0 ? (
+                  {filteredDispatchOrders.length === 0 ? (
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 font-semibold shadow">
-                      No orders logged
+                      No matching live orders in dispatch queue.
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {filteredOrders.map((order) => (
+                      {filteredDispatchOrders.map((order) => (
                         <div
                           key={order.id}
                           className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow flex flex-col justify-between space-y-4 hover:border-slate-700 transition duration-200"
@@ -1865,9 +2709,17 @@ export default function AdminDashboard() {
                           {/* Header info */}
                           <div className="flex justify-between items-start">
                             <div>
-                              <span className="font-mono text-[10px] font-black text-indigo-400 block tracking-widest uppercase">
-                                Order #{order.order_number}
-                              </span>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-mono text-[10px] font-black text-indigo-400 block tracking-widest uppercase">
+                                  Order #{order.order_number}
+                                </span>
+                                <button
+                                  onClick={() => setInspectedOrder(order)}
+                                  className="text-[9px] bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded font-bold transition"
+                                >
+                                  View Receipt ↗
+                                </button>
+                              </div>
                               <h4 className="font-black text-sm text-white mt-1">
                                 {order.student_name}
                               </h4>
@@ -1882,7 +2734,7 @@ export default function AdminDashboard() {
                                   : "bg-red-950/60 text-red-400 border border-red-500/20"
                               }`}
                             >
-                              {order.payment_status}
+                              {order.payment_status || "PAID"}
                             </span>
                           </div>
 
@@ -1895,8 +2747,9 @@ export default function AdminDashboard() {
                               {order.items_summary || "No items listed"}
                             </p>
                             {order.print_jobs_summary && (
-                              <p className="text-[11px] text-amber-300 font-semibold mt-2 leading-relaxed">
-                                {order.print_jobs_summary}
+                              <p className="text-[11px] text-amber-300 font-semibold mt-2 leading-relaxed flex items-center space-x-1">
+                                <Printer className="w-3.5 h-3.5 inline mr-1 shrink-0 text-amber-400" />
+                                <span>{order.print_jobs_summary}</span>
                               </p>
                             )}
                           </div>
@@ -1915,7 +2768,7 @@ export default function AdminDashboard() {
                             <div className="text-[10px] text-indigo-300 pl-5 font-semibold">
                               {order.slot_name
                                 ? `Slot: ${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
-                                : "No slot assigned"}
+                                : "Standard Delivery"}
                             </div>
                           </div>
 
@@ -1932,7 +2785,7 @@ export default function AdminDashboard() {
 
                             <div className="flex justify-between items-center text-xs">
                               <span className="text-[10px] font-bold text-slate-550">
-                                Status
+                                Dispatch Status
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
@@ -1950,8 +2803,8 @@ export default function AdminDashboard() {
                             </div>
 
                             {/* Actions block */}
-                            <div className="pt-2 flex items-center justify-between gap-3">
-                              {/* Left Out of Stock button */}
+                            <div className="pt-2 flex items-center justify-between gap-2">
+                              {/* Out of Stock button */}
                               {order.status !== "delivered" &&
                                 order.status !== "cancelled" &&
                                 order.status !== "out_of_stock" && (
@@ -1962,16 +2815,26 @@ export default function AdminDashboard() {
                                         order.student_phone,
                                       )
                                     }
-                                    className="text-[9.5px] font-extrabold bg-red-950/60 hover:bg-red-950 text-red-400 px-3 py-2 rounded-xl transition border border-red-500/10 active:scale-95 duration-150"
+                                    className="text-[9.5px] font-extrabold bg-red-950/60 hover:bg-red-950 text-red-400 px-2.5 py-2 rounded-xl transition border border-red-500/10 active:scale-95 duration-150"
                                   >
                                     Out of Stock
                                   </button>
                                 )}
 
-                              {/* Right Assign dropdown */}
+                              {/* Print slip button */}
+                              <button
+                                onClick={() => handlePrintReceipt(order)}
+                                className="text-[9.5px] font-extrabold bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 p-2 rounded-xl"
+                                title="Print Slip"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Assign Courier dropdown */}
                               {order.status === "received" ||
                               order.status === "preparing" ||
-                              order.status === "packed" ? (
+                              order.status === "packed" ||
+                              order.status === "assigned" ? (
                                 <select
                                   onChange={(e) =>
                                     handleAssignPartner(
@@ -1979,28 +2842,415 @@ export default function AdminDashboard() {
                                       e.target.value,
                                     )
                                   }
-                                  defaultValue=""
-                                  className="flex-1 bg-slate-950 border border-slate-800 text-slate-350 text-[10px] p-2 rounded-xl outline-none"
+                                  value={order.delivery_partner_id || ""}
+                                  className="flex-1 bg-slate-950 border border-slate-800 text-slate-200 text-[10px] p-2 rounded-xl outline-none focus:border-indigo-500"
                                 >
                                   <option value="" disabled>
                                     Assign Courier...
                                   </option>
                                   {partners
                                     .filter((p) => p.is_online)
-                                    .map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.name}
-                                      </option>
-                                    ))}
+                                    .map((p) => {
+                                      const workload = getCourierActiveWorkload(p.id, p.name);
+                                      return (
+                                        <option key={p.id} value={p.id}>
+                                          {p.name} ({workload} active)
+                                        </option>
+                                      );
+                                    })}
                                 </select>
                               ) : (
-                                <div className="text-[10px] text-slate-550 font-semibold italic flex items-center space-x-1 py-1">
+                                <div className="text-[10px] text-slate-400 font-semibold italic flex items-center space-x-1 py-1">
                                   <span>
-                                    Assigned to:{" "}
-                                    {order.delivery_partner_name || "Courier"}
+                                    Courier: {order.delivery_partner_name || "Assigned"}
                                   </span>
                                 </div>
                               )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab: Order History & Operations Archive */}
+              {activeTab === "history" && (
+                <div className="space-y-6">
+                  {/* Top Title & Header Actions */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+                    <div>
+                      <h3 className="text-xl font-black tracking-tight text-white flex items-center space-x-2">
+                        <FileText className="w-5 h-5 text-indigo-400" />
+                        <span>All Order History & Operations Archive</span>
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Searchable, filterable ledger of all historical orders, print jobs, courier dispatches, and receipts.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={exportHistoryCSV}
+                        className="bg-emerald-650 hover:bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow transition"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export CSV</span>
+                      </button>
+
+                      {/* View Mode Toggle */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-xl p-1 flex items-center space-x-1">
+                        <button
+                          onClick={() => setHistoryViewMode("table")}
+                          className={`p-1.5 rounded-lg text-xs font-bold transition ${
+                            historyViewMode === "table"
+                              ? "bg-indigo-600 text-white"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                          title="Table View"
+                        >
+                          <List className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setHistoryViewMode("cards")}
+                          className={`p-1.5 rounded-lg text-xs font-bold transition ${
+                            historyViewMode === "cards"
+                              ? "bg-indigo-600 text-white"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                          title="Grid Cards View"
+                        >
+                          <LayoutGrid className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric KPI Bar */}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Total Orders
+                      </span>
+                      <span className="text-2xl font-black text-white">
+                        {filteredHistoryOrders.length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Fulfilled & Delivered
+                      </span>
+                      <span className="text-2xl font-black text-emerald-400">
+                        {filteredHistoryOrders.filter((o) => o.status === "delivered").length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Out of Stock / Cancelled
+                      </span>
+                      <span className="text-2xl font-black text-rose-400">
+                        {filteredHistoryOrders.filter((o) => o.status === "out_of_stock" || o.status === "cancelled").length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        In Progress
+                      </span>
+                      <span className="text-2xl font-black text-indigo-400">
+                        {filteredHistoryOrders.filter((o) => o.status !== "delivered" && o.status !== "cancelled" && o.status !== "out_of_stock").length}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Total Revenue
+                      </span>
+                      <span className="text-2xl font-black text-amber-400">
+                        ₹{filteredHistoryOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0).toFixed(0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Multi-Criteria Filtering Controls */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 shadow">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* Search Bar */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        <input
+                          type="text"
+                          value={historySearch}
+                          onChange={(e) => setHistorySearch(e.target.value)}
+                          placeholder="Search order #, student, room..."
+                          className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs outline-none text-white focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* Date Range Filter */}
+                      <select
+                        value={historyDateFilter}
+                        onChange={(e) => setHistoryDateFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                      >
+                        <option value="all">📅 All Time Records</option>
+                        <option value="today">Today's Orders</option>
+                        <option value="yesterday">Yesterday's Orders</option>
+                        <option value="this_week">Past 7 Days</option>
+                      </select>
+
+                      {/* Hostel Block Filter */}
+                      <select
+                        value={historyBuildingFilter}
+                        onChange={(e) => setHistoryBuildingFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                      >
+                        <option value="all">🏢 All Hostel Blocks</option>
+                        <option value="N Block">N Block</option>
+                        <option value="A Block">A Block</option>
+                        <option value="H Block">H Block</option>
+                        <option value="U Block">U Block</option>
+                        <option value="Lara">Lara</option>
+                        <option value="Pharmacy">Pharmacy</option>
+                      </select>
+
+                      {/* Courier Filter */}
+                      <select
+                        value={historyCourierFilter}
+                        onChange={(e) => setHistoryCourierFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                      >
+                        <option value="all">🚚 All Delivery Couriers</option>
+                        {partners.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Status Filter Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-850 pt-3">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                        Status Filter:
+                      </span>
+                      {[
+                        { id: "all", label: "All Statuses" },
+                        { id: "delivered", label: "Delivered" },
+                        { id: "received", label: "Received" },
+                        { id: "preparing", label: "Preparing" },
+                        { id: "packed", label: "Packed" },
+                        { id: "out_for_delivery", label: "Out for Delivery" },
+                        { id: "out_of_stock", label: "Out of Stock" },
+                        { id: "cancelled", label: "Cancelled" },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setHistoryStatusFilter(tab.id)}
+                          className={`text-xs font-extrabold px-3 py-1 rounded-xl transition ${
+                            historyStatusFilter === tab.id
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* History Data Table View */}
+                  {historyViewMode === "table" ? (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-850 bg-slate-950 text-slate-400 uppercase font-black tracking-wider text-[9px]">
+                              <th className="p-4">Order # & Timestamp</th>
+                              <th className="p-4">Student Info & Location</th>
+                              <th className="p-4">Food & Print Summary</th>
+                              <th className="p-4">Delivery Window & Slot</th>
+                              <th className="p-4">Assigned Courier</th>
+                              <th className="p-4 text-right">Amount & Status</th>
+                              <th className="p-4 text-center">Receipt & Slip</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredHistoryOrders.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={7}
+                                  className="p-12 text-center text-slate-500 font-semibold"
+                                >
+                                  No historical orders found matching the filter criteria.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredHistoryOrders.map((order) => (
+                                <tr
+                                  key={order.id}
+                                  className="border-b border-slate-850 hover:bg-slate-850/30 transition"
+                                >
+                                  <td className="p-4">
+                                    <div className="font-mono text-sm font-black text-indigo-400">
+                                      #{order.order_number}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-0.5">
+                                      {new Date(order.created_at).toLocaleString()}
+                                    </div>
+                                  </td>
+                                  <td className="p-4">
+                                    <div className="font-bold text-white text-sm">
+                                      {order.student_name}
+                                    </div>
+                                    <div className="text-slate-350 text-xs font-semibold">
+                                      Room {order.room_number}, {order.building} (Fl {order.floor})
+                                    </div>
+                                    <div className="text-slate-500 text-[10px]">
+                                      Ph: {order.student_phone}
+                                    </div>
+                                  </td>
+                                  <td className="p-4 max-w-xs">
+                                    <div className="font-semibold text-slate-200 truncate">
+                                      {order.items_summary || "No food items"}
+                                    </div>
+                                    {order.print_jobs_summary && (
+                                      <div className="text-amber-300 text-[10px] font-bold mt-1 flex items-center">
+                                        <Printer className="w-3 h-3 inline mr-1 shrink-0 text-amber-400" />
+                                        <span>{order.print_jobs_summary}</span>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-4">
+                                    <span className="text-xs text-indigo-300 font-semibold">
+                                      {order.slot_name
+                                        ? `${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
+                                        : "Standard Delivery"}
+                                    </span>
+                                  </td>
+                                  <td className="p-4">
+                                    <span className="text-xs text-slate-300 font-medium">
+                                      {order.delivery_partner_name || "Unassigned"}
+                                    </span>
+                                  </td>
+                                  <td className="p-4 text-right">
+                                    <div className="font-black text-amber-400 text-sm">
+                                      ₹{order.total_amount.toFixed(0)}
+                                    </div>
+                                    <span
+                                      className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase mt-1 ${
+                                        order.status === "delivered"
+                                          ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
+                                          : order.status === "out_of_stock" || order.status === "cancelled"
+                                            ? "bg-red-950 text-red-400 border border-red-500/20"
+                                            : "bg-indigo-950 text-indigo-300 border border-indigo-500/20"
+                                      }`}
+                                    >
+                                      {order.status.replace(/_/g, " ")}
+                                    </span>
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    <div className="inline-flex space-x-1.5">
+                                      <button
+                                        onClick={() => setInspectedOrder(order)}
+                                        className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-indigo-400 p-2 rounded-xl transition"
+                                        title="Inspect Receipt Dossier"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handlePrintReceipt(order)}
+                                        className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-amber-400 p-2 rounded-xl transition"
+                                        title="Print Receipt Slip"
+                                      >
+                                        <Printer className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    /* History Grid Cards View */
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredHistoryOrders.map((order) => (
+                        <div
+                          key={order.id}
+                          className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="font-mono text-[10px] font-black text-indigo-400 block uppercase tracking-widest">
+                                #{order.order_number}
+                              </span>
+                              <h4 className="font-black text-sm text-white mt-1">
+                                {order.student_name}
+                              </h4>
+                              <span className="text-[10px] text-slate-500">
+                                {new Date(order.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                order.status === "delivered"
+                                  ? "bg-emerald-950 text-emerald-400"
+                                  : order.status === "out_of_stock" || order.status === "cancelled"
+                                    ? "bg-red-950 text-red-400"
+                                    : "bg-indigo-950 text-indigo-400"
+                              }`}
+                            >
+                              {order.status.replace(/_/g, " ")}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-850 text-xs">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase block mb-1">
+                              Items Summary
+                            </span>
+                            <p className="text-slate-200 font-extrabold">
+                              {order.items_summary || "No items"}
+                            </p>
+                            {order.print_jobs_summary && (
+                              <p className="text-[11px] text-amber-300 font-semibold mt-2">
+                                🖨️ {order.print_jobs_summary}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-slate-400 space-y-1">
+                            <div>Room {order.room_number}, {order.building} (Floor {order.floor})</div>
+                            <div className="text-indigo-300 font-semibold">
+                              {order.slot_name ? `Slot: ${order.slot_name}` : "Standard Delivery"}
+                            </div>
+                            <div className="text-slate-500">Courier: {order.delivery_partner_name || "Unassigned"}</div>
+                          </div>
+
+                          <div className="border-t border-slate-850 pt-3 flex justify-between items-center">
+                            <span className="text-sm font-black text-amber-400">
+                              ₹{order.total_amount.toFixed(0)}
+                            </span>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handlePrintReceipt(order)}
+                                className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Print</span>
+                              </button>
+                              <button
+                                onClick={() => setInspectedOrder(order)}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Receipt</span>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -2777,6 +4027,254 @@ export default function AdminDashboard() {
                       </button>
                     </form>
                   </div>
+                </div>
+              )}
+
+              {/* Order Receipt & Invoice Dossier Modal */}
+              {inspectedOrder && (
+                <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-6 max-h-[85vh] overflow-y-auto"
+                  >
+                    {/* Header */}
+                    <div className="flex justify-between items-start border-b border-slate-800 pb-4">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-indigo-400 font-mono font-black uppercase tracking-wider">
+                            Order Dossier & Receipt
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                              inspectedOrder.status === "delivered"
+                                ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
+                                : inspectedOrder.status === "out_of_stock" || inspectedOrder.status === "cancelled"
+                                  ? "bg-red-950 text-red-400 border border-red-500/20"
+                                  : "bg-indigo-950 text-indigo-300 border border-indigo-500/20"
+                            }`}
+                          >
+                            {inspectedOrder.status.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        <h3 className="text-2xl font-black text-white font-mono mt-1">
+                          #{inspectedOrder.order_number}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Placed on {new Date(inspectedOrder.created_at).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handlePrintReceipt(inspectedOrder)}
+                          className="bg-slate-950 border border-slate-800 text-amber-400 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition"
+                        >
+                          <Printer className="w-4 h-4" />
+                          <span>Print Slip</span>
+                        </button>
+                        <button
+                          onClick={() => setInspectedOrder(null)}
+                          className="bg-slate-950 border border-slate-800 p-1.5 rounded-xl text-slate-400 hover:text-white transition"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Lifecycle Progress Bar */}
+                    <div className="bg-slate-950 rounded-2xl p-4 border border-slate-850 space-y-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Order Lifecycle Status Progress
+                      </span>
+                      <div className="flex items-center justify-between text-xs font-bold pt-1">
+                        {[
+                          { id: "received", label: "Received" },
+                          { id: "preparing", label: "Preparing" },
+                          { id: "packed", label: "Packed" },
+                          { id: "out_for_delivery", label: "Out for Delivery" },
+                          { id: "delivered", label: "Delivered" },
+                        ].map((step, idx, arr) => {
+                          const stepsOrder = ["received", "preparing", "packed", "assigned", "out_for_delivery", "delivered"];
+                          const currentIdx = stepsOrder.indexOf(inspectedOrder.status);
+                          const stepIdx = stepsOrder.indexOf(step.id);
+                          const isDone = currentIdx >= stepIdx && inspectedOrder.status !== "cancelled" && inspectedOrder.status !== "out_of_stock";
+                          return (
+                            <React.Fragment key={step.id}>
+                              <div className="flex flex-col items-center space-y-1">
+                                <div
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                    isDone
+                                      ? "bg-emerald-600 text-white"
+                                      : inspectedOrder.status === "cancelled" || inspectedOrder.status === "out_of_stock"
+                                        ? "bg-red-950 text-red-400 border border-red-800"
+                                        : "bg-slate-800 text-slate-500"
+                                  }`}
+                                >
+                                  {isDone ? "✓" : idx + 1}
+                                </div>
+                                <span className={`text-[9px] ${isDone ? "text-emerald-400 font-bold" : "text-slate-500"}`}>
+                                  {step.label}
+                                </span>
+                              </div>
+                              {idx < arr.length - 1 && (
+                                <div className={`flex-1 h-0.5 mx-1 ${isDone ? "bg-emerald-600" : "bg-slate-800"}`} />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Customer & Courier Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Customer Info */}
+                      <div className="bg-slate-950 rounded-2xl p-4 border border-slate-850 space-y-2 text-xs">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                          Student Information & Address
+                        </span>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Student Name:</span>
+                          <span className="font-bold text-white">{inspectedOrder.student_name || "N/A"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Mobile Contact:</span>
+                          <span className="font-semibold text-slate-200">{inspectedOrder.student_phone || "N/A"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Hostel Address:</span>
+                          <span className="font-bold text-indigo-300">
+                            Room {inspectedOrder.room_number}, {inspectedOrder.building} (Floor {inspectedOrder.floor})
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Delivery Slot:</span>
+                          <span className="font-semibold text-slate-300">
+                            {inspectedOrder.slot_name
+                              ? `${inspectedOrder.slot_name} (${inspectedOrder.slot_delivery_start}–${inspectedOrder.slot_delivery_end})`
+                              : "Standard Delivery"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Courier & Payment Info */}
+                      <div className="bg-slate-950 rounded-2xl p-4 border border-slate-850 space-y-2 text-xs">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                          Logistics Courier & Payment
+                        </span>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Assigned Courier:</span>
+                          <span className="font-bold text-teal-400">{inspectedOrder.delivery_partner_name || "Unassigned"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Payment Status:</span>
+                          <span className="font-bold text-emerald-400 uppercase">{inspectedOrder.payment_status || "PAID (Razorpay)"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Counter Pickup Flag:</span>
+                          <span className={`font-bold ${inspectedOrder.not_available_flag ? "text-rose-400" : "text-slate-400"}`}>
+                            {inspectedOrder.not_available_flag ? "Yes (Not Present)" : "No (Normal Doorstep)"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Food Items Breakdown */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Line Items Breakdown
+                      </span>
+                      <div className="bg-slate-950 rounded-2xl border border-slate-850 p-4 space-y-2">
+                        {inspectedOrder.items && inspectedOrder.items.length > 0 ? (
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-850 text-slate-500 uppercase text-[9px] font-bold">
+                                <th className="pb-2">Product Name</th>
+                                <th className="pb-2 text-center">Qty</th>
+                                <th className="pb-2 text-right">Unit Price</th>
+                                <th className="pb-2 text-right">Line Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {inspectedOrder.items.map((item: any, idx: number) => (
+                                <tr key={idx} className="border-b border-slate-900/50">
+                                  <td className="py-2 font-bold text-white">{item.product_name || "Food Item"}</td>
+                                  <td className="py-2 text-center font-mono font-bold text-indigo-300">x{item.quantity}</td>
+                                  <td className="py-2 text-right text-slate-400">₹{item.unit_price}</td>
+                                  <td className="py-2 text-right font-black text-amber-400">₹{item.quantity * item.unit_price}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="text-xs text-slate-200 font-extrabold">
+                            {inspectedOrder.items_summary || "No items listed"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Print Jobs Section if present */}
+                    {inspectedOrder.print_jobs && inspectedOrder.print_jobs.length > 0 && (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block flex items-center space-x-1">
+                          <Printer className="w-3.5 h-3.5 inline mr-1" />
+                          <span>Attached Print Documents ({inspectedOrder.print_jobs.length})</span>
+                        </span>
+                        <div className="space-y-2">
+                          {inspectedOrder.print_jobs.map((pj: any, idx: number) => (
+                            <div key={idx} className="bg-slate-950 border border-amber-500/20 rounded-2xl p-3 flex justify-between items-center text-xs">
+                              <div>
+                                <div className="font-bold text-white flex items-center space-x-1.5">
+                                  <span>📄 {pj.file_name}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  {pj.page_count} pages • {pj.copies} copies • {pj.color_mode.toUpperCase()} • {pj.sides.toUpperCase()}
+                                </div>
+                              </div>
+                              <a
+                                href={pj.file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-xl font-bold text-[10px] flex items-center space-x-1 transition"
+                              >
+                                <span>Open File</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Financial Summary */}
+                    <div className="bg-slate-950 rounded-2xl p-4 border border-slate-850 flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Grand Total Paid</span>
+                        <span className="text-xs text-slate-400">Includes delivery fee & print charges</span>
+                      </div>
+                      <span className="text-3xl font-black text-amber-400 font-mono">
+                        ₹{inspectedOrder.total_amount.toFixed(0)}
+                      </span>
+                    </div>
+
+                    {/* Modal Actions */}
+                    <div className="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+                      <button
+                        onClick={() => handlePrintReceipt(inspectedOrder)}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-1.5"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Print Invoice Slip</span>
+                      </button>
+                      <button
+                        onClick={() => setInspectedOrder(null)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold"
+                      >
+                        Close Details
+                      </button>
+                    </div>
+                  </motion.div>
                 </div>
               )}
 

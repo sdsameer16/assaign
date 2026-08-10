@@ -14,15 +14,17 @@ export type OrderStatus =
 export type PaymentStatus = "created" | "paid" | "failed" | "refunded";
 export type AdminRole = "super_admin" | "staff";
 
-// Hostel Buildings
+// Hostel & Campus Buildings
 export const BUILDINGS = [
-  "Hostel A",
-  "Hostel B",
-  "Hostel C",
-  "Hostel D",
-  "PG Block",
+  "N Block",
+  "A Block",
+  "H Block",
+  "U Block",
+  "Lara",
+  "Pharmacy",
 ] as const;
 export type Building = (typeof BUILDINGS)[number];
+
 
 // Student Interface
 export interface Student {
@@ -97,6 +99,7 @@ export interface Order {
   student_name?: string;
   student_phone?: string;
   delivery_partner_name?: string;
+  delivery_partner_id?: string;
   not_available_flag?: boolean;
 }
 
@@ -228,3 +231,47 @@ export interface DashboardSummary {
   online_partners: number;
   popular_product: string;
 }
+
+export interface CartItemData {
+  product_id: string;
+  quantity: number;
+}
+
+export interface DeliveryConfig {
+  id?: string;
+  delivery_fee: number;
+  min_free_delivery_amount: number;
+  updated_at?: string;
+}
+
+export interface OrderReview {
+  id?: string;
+  order_id: string;
+  student_id?: string;
+  rating: number;
+  review?: string;
+  created_at?: string;
+}
+
+export interface MenuScheduleCategory {
+  id?: string;
+  schedule_id?: string;
+  category_id: string;
+  category_name?: string;
+  display_order: number;
+}
+
+export interface MenuSchedule {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  is_enabled: boolean;
+  display_order: number;
+  categories: MenuScheduleCategory[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+
+

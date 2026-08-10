@@ -250,3 +250,58 @@ type DeliveryOrderView struct {
 	SlotDeliveryStart   string      `json:"slot_delivery_start,omitempty"`
 	SlotDeliveryEnd     string      `json:"slot_delivery_end,omitempty"`
 }
+
+// Cart model mapping to carts table
+type Cart struct {
+	ID        string         `json:"id"`
+	StudentID string         `json:"student_id"`
+	Items     []CartItemData `json:"items"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+type CartItemData struct {
+	ProductID string `json:"product_id"`
+	Quantity  int    `json:"quantity"`
+}
+
+// OrderReview model mapping to order_reviews table
+type OrderReview struct {
+	ID        string    `json:"id"`
+	OrderID   string    `json:"order_id"`
+	StudentID string    `json:"student_id"`
+	Rating    int       `json:"rating"`
+	Review    string    `json:"review"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// DeliveryConfig model mapping to delivery_config table
+type DeliveryConfig struct {
+	ID                    string    `json:"id,omitempty"`
+	DeliveryFee           float64   `json:"delivery_fee"`
+	MinFreeDeliveryAmount float64   `json:"min_free_delivery_amount"`
+	UpdatedAt             time.Time `json:"updated_at,omitempty"`
+}
+
+// MenuSchedule model mapping to menu_schedules table
+type MenuSchedule struct {
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	StartTime    string                 `json:"start_time"` // "HH:MM" format
+	EndTime      string                 `json:"end_time"`   // "HH:MM" format
+	IsEnabled    bool                   `json:"is_enabled"`
+	DisplayOrder int                    `json:"display_order"`
+	Categories   []MenuScheduleCategory `json:"categories"`
+	CreatedAt    time.Time              `json:"created_at,omitempty"`
+	UpdatedAt    time.Time              `json:"updated_at,omitempty"`
+}
+
+type MenuScheduleCategory struct {
+	ID           string `json:"id,omitempty"`
+	ScheduleID   string `json:"schedule_id,omitempty"`
+	CategoryID   string `json:"category_id"`
+	CategoryName string `json:"category_name,omitempty"`
+	DisplayOrder int    `json:"display_order"`
+}
+
+
+

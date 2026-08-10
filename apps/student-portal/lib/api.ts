@@ -222,4 +222,32 @@ export const studentApi = {
     apiRequest<{ message: string }>("/privacy/accept", {
       method: "POST",
     }),
+
+  getCart: () => apiRequest<{ items: { product_id: string; quantity: number }[] }>("/cart"),
+
+  updateCart: (items: { product_id: string; quantity: number }[]) =>
+    apiRequest<{ status: string; items: { product_id: string; quantity: number }[] }>("/cart", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
+
+  mergeCart: (items: { product_id: string; quantity: number }[]) =>
+    apiRequest<{ status: string; items: { product_id: string; quantity: number }[] }>("/cart/merge", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
+
+  getDeliveryConfig: () =>
+    apiRequest<{ delivery_fee: number; min_free_delivery_amount: number }>("/delivery-config"),
+
+  getMenuSchedules: () => apiRequest<import("@campusbites/types").MenuSchedule[]>("/menu-schedules"),
+
+  submitReview: (orderId: string, rating: number, review: string) =>
+    apiRequest<{ status: string; message: string }>(`/orders/${orderId}/review`, {
+      method: "POST",
+      body: JSON.stringify({ rating, review }),
+    }),
 };
+
+
+

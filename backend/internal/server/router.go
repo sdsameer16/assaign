@@ -32,19 +32,27 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 			r.Get("/menu", hCtx.GetMenu)
 			r.Get("/cutoff", hCtx.GetCutoffTime)
 			r.Get("/delivery-slots", hCtx.StudentListDeliverySlots)
+			r.Get("/delivery-config", hCtx.GetDeliveryConfig)
 			r.Get("/print-pricing", hCtx.GetPrintPricing)
 			r.Get("/tracking-ad", hCtx.GetTrackingAd)
+			r.Get("/menu-schedules", hCtx.GetActiveMenuSchedules)
 
 			// Authenticated Student Endpoints
+
 			r.Group(func(r chi.Router) {
 				r.Use(customMiddleware.AuthMiddleware(hCtx.AuthService))
 				r.Use(customMiddleware.RequireRole("student"))
 
 				r.Get("/privacy", hCtx.GetPrivacyStatus)
 				r.Post("/privacy/accept", hCtx.AcceptPrivacy)
+				r.Get("/cart", hCtx.GetCart)
+				r.Post("/cart", hCtx.UpdateCart)
+				r.Post("/cart/merge", hCtx.MergeCart)
 				r.Post("/orders", hCtx.StudentCreateOrder)
+
 				r.Get("/orders/history", hCtx.StudentGetHistory)
 				r.Get("/orders/{id}/track", hCtx.TrackOrder)
+				r.Post("/orders/{id}/review", hCtx.CreateOrderReview)
 				r.Get("/orders/{id}/payment-status", hCtx.GetPaymentStatus)
 				r.Post("/orders/{id}/cancel-unpaid", hCtx.CancelUnpaidOrder)
 				r.Post("/payments/verify", hCtx.StudentVerifyPayment)
@@ -83,12 +91,20 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Post("/delivery-slots", hCtx.CreateDeliverySlot)
 				r.Put("/delivery-slots/{id}", hCtx.UpdateDeliverySlot)
 				r.Patch("/delivery-slots/{id}/active", hCtx.ToggleDeliverySlotActive)
+				r.Get("/delivery-config", hCtx.GetDeliveryConfig)
+				r.Put("/delivery-config", hCtx.UpdateDeliveryConfig)
 				r.Get("/print-pricing", hCtx.GetPrintPricing)
 				r.Put("/print-pricing", hCtx.UpdatePrintPricing)
 				r.Get("/tracking-ad", hCtx.GetTrackingAd)
 				r.Put("/tracking-ad", hCtx.UpdateTrackingAd)
+				r.Get("/menu-schedules", hCtx.ListMenuSchedules)
+				r.Post("/menu-schedules", hCtx.CreateMenuSchedule)
+				r.Put("/menu-schedules/{id}", hCtx.UpdateMenuSchedule)
+				r.Delete("/menu-schedules/{id}", hCtx.DeleteMenuSchedule)
 				r.Post("/send-notification", hCtx.AdminSendNotification)
 			})
+
+
 		})
 
 		// 3. Delivery Partner App API Group

@@ -254,6 +254,54 @@ export const adminApi = {
       body: JSON.stringify({ target_student: target, title, body }),
     }),
 
+  getDeliveryConfig: () =>
+    apiRequest<{ delivery_fee: number; min_free_delivery_amount: number }>("/delivery-config"),
+
+  updateDeliveryConfig: (deliveryFee: number, minFreeDeliveryAmount: number) =>
+    apiRequest<{ status: string; delivery_fee: number; min_free_delivery_amount: number }>("/delivery-config", {
+      method: "PUT",
+      body: JSON.stringify({ delivery_fee: deliveryFee, min_free_delivery_amount: minFreeDeliveryAmount }),
+    }),
+
+  // Menu Schedules
+  getMenuSchedules: () => apiRequest<import("@campusbites/types").MenuSchedule[]>("/menu-schedules"),
+
+  createMenuSchedule: (data: {
+    name: string;
+    start_time: string;
+    end_time: string;
+    is_enabled: boolean;
+    display_order: number;
+    category_ids: string[];
+  }) =>
+    apiRequest<{ status: string; id: string }>("/menu-schedules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateMenuSchedule: (
+    id: string,
+    data: {
+      name: string;
+      start_time: string;
+      end_time: string;
+      is_enabled: boolean;
+      display_order: number;
+      category_ids: string[];
+    },
+  ) =>
+    apiRequest<{ status: string }>(`/menu-schedules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteMenuSchedule: (id: string) =>
+    apiRequest<{ status: string }>(`/menu-schedules/${id}`, {
+      method: "DELETE",
+    }),
+
   // Audit Trails
   getAuditLogs: () => apiRequest<AuditLog[]>("/audit-logs"),
 };
+
+

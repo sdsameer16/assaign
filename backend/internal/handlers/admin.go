@@ -289,8 +289,8 @@ func (h *HandlerContext) CreateProduct(w http.ResponseWriter, r *http.Request) {
 func (h *HandlerContext) GetStudents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := `
-		SELECT s.id, s.mobile_number, s.short_name, s.roll_number, s.verification_status, s.registered_at, 
-		       sd.id_card_url, sd.ocr_extracted_name, sd.ocr_extracted_roll_number, sd.name_similarity_score, sd.confidence_level
+		SELECT s.id, s.mobile_number, s.short_name, s.roll_number, s.verification_status::text, s.registered_at, 
+		       sd.id_card_url, sd.ocr_extracted_name, sd.ocr_extracted_roll_number, sd.name_similarity_score, sd.confidence_level::text
 		FROM students s
 		LEFT JOIN student_documents sd ON s.id = sd.student_id
 		ORDER BY s.registered_at DESC
@@ -526,11 +526,36 @@ func (h *HandlerContext) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 // AdminGetOrders retrieves order metrics for the administration view
+func (h *HandlerContext) loadOrderItemsForOrder(ctx context.Context, orderID string) []models.OrderItem {
+	query := `
+		SELECT oi.id, oi.product_id, COALESCE(pr.name, 'Item'), oi.quantity, oi.unit_price
+		FROM order_items oi
+		LEFT JOIN products pr ON oi.product_id = pr.id
+		WHERE oi.order_id = $1
+	`
+	rows, err := h.DB.Pool.Query(ctx, query, orderID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var items []models.OrderItem
+	for rows.Next() {
+		var item models.OrderItem
+		var productName string
+		if err := rows.Scan(&item.ID, &item.ProductID, &productName, &item.Quantity, &item.UnitPrice); err == nil {
+			item.ProductName = productName
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
 func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := `
-		SELECT o.id, o.order_number, o.student_id, s.short_name, s.mobile_number, o.room_number, o.building, o.floor, o.total_amount, o.status, o.created_at, p.status,
-		       COALESCE(dp.name, ''), COALESCE(da.not_available_flag, false),
+		SELECT o.id, o.order_number, o.student_id, COALESCE(s.short_name, 'Student'), COALESCE(s.mobile_number, ''), o.room_number, o.building, o.floor, o.total_amount, o.status, o.created_at, COALESCE(p.status, 'paid'),
+		       COALESCE(dp.name, ''), COALESCE(dp.id::text, ''), COALESCE(da.not_available_flag, false),
 		       COALESCE((
 		           SELECT string_agg(pr.name || ' x' || oi.quantity, ', ')
 		           FROM order_items oi
@@ -541,12 +566,11 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		       COALESCE(TO_CHAR(ds.delivery_start, 'HH24:MI'), ''),
 		       COALESCE(TO_CHAR(ds.delivery_end, 'HH24:MI'), '')
 		FROM orders o
-		JOIN students s ON o.student_id = s.id
-		JOIN payments p ON o.id = p.order_id
+		LEFT JOIN students s ON o.student_id = s.id
+		LEFT JOIN payments p ON o.id = p.order_id
 		LEFT JOIN delivery_assignments da ON o.id = da.order_id
 		LEFT JOIN delivery_partners dp ON da.delivery_partner_id = dp.id
 		LEFT JOIN delivery_slots ds ON o.delivery_slot_id = ds.id
-		WHERE p.status = 'paid'
 		ORDER BY o.created_at DESC
 	`
 	rows, err := h.DB.Pool.Query(ctx, query)
@@ -570,8 +594,10 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		CreatedAt           time.Time         `json:"created_at"`
 		PaymentStatus       string            `json:"payment_status"`
 		DeliveryPartnerName string            `json:"delivery_partner_name"`
+		DeliveryPartnerID   string            `json:"delivery_partner_id"`
 		NotAvailableFlag    bool              `json:"not_available_flag"`
 		ItemsSummary        string            `json:"items_summary"`
+		Items               []models.OrderItem `json:"items,omitempty"`
 		PrintJobsSummary    string            `json:"print_jobs_summary"`
 		PrintJobs           []models.PrintJob `json:"print_jobs,omitempty"`
 		SlotName            string            `json:"slot_name"`
@@ -584,11 +610,12 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		var item OrderAdminItem
 		err = rows.Scan(
 			&item.ID, &item.OrderNumber, &item.StudentID, &item.StudentName, &item.StudentPhone, &item.RoomNumber, &item.Building, &item.Floor,
-			&item.TotalAmount, &item.Status, &item.CreatedAt, &item.PaymentStatus, &item.DeliveryPartnerName,
+			&item.TotalAmount, &item.Status, &item.CreatedAt, &item.PaymentStatus, &item.DeliveryPartnerName, &item.DeliveryPartnerID,
 			&item.NotAvailableFlag, &item.ItemsSummary,
 			&item.SlotName, &item.SlotDeliveryStart, &item.SlotDeliveryEnd,
 		)
 		if err == nil {
+			item.Items = h.loadOrderItemsForOrder(ctx, item.ID)
 			item.PrintJobs = h.loadPrintJobsForOrder(ctx, item.ID)
 			item.PrintJobsSummary = printJobsSummary(item.PrintJobs)
 			list = append(list, item)
@@ -995,4 +1022,280 @@ func (h *HandlerContext) AdminSendNotification(w http.ResponseWriter, r *http.Re
 		"targetCount": len(tokens),
 	})
 }
+
+// GetDeliveryConfig fetches the current dynamic delivery configuration
+func (h *HandlerContext) GetDeliveryConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var config models.DeliveryConfig
+	err := h.DB.Pool.QueryRow(ctx, `
+		SELECT delivery_fee, min_free_delivery_amount
+		FROM delivery_config
+		ORDER BY updated_at DESC LIMIT 1
+	`).Scan(&config.DeliveryFee, &config.MinFreeDeliveryAmount)
+
+	if err != nil {
+		config.DeliveryFee = 15.00
+		config.MinFreeDeliveryAmount = 100.00
+	}
+
+	RespondJSON(w, http.StatusOK, config)
+}
+
+// UpdateDeliveryConfig updates the dynamic delivery settings
+func (h *HandlerContext) UpdateDeliveryConfig(w http.ResponseWriter, r *http.Request) {
+	adminID, ok := r.Context().Value("user_id").(string)
+	if !ok || adminID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req models.DeliveryConfig
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.DeliveryFee < 0 || req.MinFreeDeliveryAmount < 0 {
+		RespondError(w, http.StatusBadRequest, "delivery amounts cannot be negative")
+		return
+	}
+
+	ctx := r.Context()
+	var configID string
+	err := h.DB.Pool.QueryRow(ctx, `
+		INSERT INTO delivery_config (delivery_fee, min_free_delivery_amount, updated_at)
+		VALUES ($1, $2, NOW())
+		RETURNING id
+	`, req.DeliveryFee, req.MinFreeDeliveryAmount).Scan(&configID)
+
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to update delivery config")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Updated delivery fee to ₹%.2f, min free delivery threshold to ₹%.2f", req.DeliveryFee, req.MinFreeDeliveryAmount), r)
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":                   "success",
+		"delivery_fee":             req.DeliveryFee,
+		"min_free_delivery_amount": req.MinFreeDeliveryAmount,
+	})
+}
+
+// ListMenuSchedules returns all menu schedules with their assigned categories
+func (h *HandlerContext) ListMenuSchedules(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h.ensureMenuScheduleTables(ctx)
+
+	query := `
+		SELECT ms.id, ms.name, TO_CHAR(ms.start_time, 'HH24:MI'), TO_CHAR(ms.end_time, 'HH24:MI'), ms.is_enabled, ms.display_order
+		FROM menu_schedules ms
+		ORDER BY ms.display_order ASC, ms.start_time ASC
+	`
+	rows, err := h.DB.Pool.Query(ctx, query)
+	if err != nil {
+		RespondJSON(w, http.StatusOK, []models.MenuSchedule{})
+		return
+	}
+	defer rows.Close()
+
+
+	var schedules []models.MenuSchedule
+	for rows.Next() {
+		var s models.MenuSchedule
+		if err := rows.Scan(&s.ID, &s.Name, &s.StartTime, &s.EndTime, &s.IsEnabled, &s.DisplayOrder); err == nil {
+			s.Categories = h.getMenuScheduleCategories(ctx, s.ID)
+			schedules = append(schedules, s)
+		}
+	}
+
+	if schedules == nil {
+		schedules = []models.MenuSchedule{}
+	}
+
+	RespondJSON(w, http.StatusOK, schedules)
+}
+
+func (h *HandlerContext) getMenuScheduleCategories(ctx context.Context, scheduleID string) []models.MenuScheduleCategory {
+	query := `
+		SELECT msc.id, msc.schedule_id, msc.category_id, c.name, msc.display_order
+		FROM menu_schedule_categories msc
+		JOIN categories c ON msc.category_id = c.id
+		WHERE msc.schedule_id = $1
+		ORDER BY msc.display_order ASC
+	`
+	rows, err := h.DB.Pool.Query(ctx, query, scheduleID)
+	if err != nil {
+		return []models.MenuScheduleCategory{}
+	}
+	defer rows.Close()
+
+	var list []models.MenuScheduleCategory
+	for rows.Next() {
+		var cat models.MenuScheduleCategory
+		if err := rows.Scan(&cat.ID, &cat.ScheduleID, &cat.CategoryID, &cat.CategoryName, &cat.DisplayOrder); err == nil {
+			list = append(list, cat)
+		}
+	}
+	if list == nil {
+		list = []models.MenuScheduleCategory{}
+	}
+	return list
+}
+
+// CreateMenuSchedule creates a new menu schedule window
+func (h *HandlerContext) CreateMenuSchedule(w http.ResponseWriter, r *http.Request) {
+	adminID, ok := r.Context().Value("user_id").(string)
+	if !ok || adminID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Name         string   `json:"name"`
+		StartTime    string   `json:"start_time"`
+		EndTime      string   `json:"end_time"`
+		IsEnabled    bool     `json:"is_enabled"`
+		DisplayOrder int      `json:"display_order"`
+		CategoryIDs  []string `json:"category_ids"`
+	}
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" || req.StartTime == "" || req.EndTime == "" {
+		RespondError(w, http.StatusBadRequest, "name, start_time and end_time are required")
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var scheduleID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO menu_schedules (name, start_time, end_time, is_enabled, display_order, created_at, updated_at)
+		VALUES ($1, $2::TIME, $3::TIME, $4, $5, NOW(), NOW())
+		RETURNING id
+	`, req.Name, req.StartTime, req.EndTime, req.IsEnabled, req.DisplayOrder).Scan(&scheduleID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to insert menu schedule: "+err.Error())
+		return
+	}
+
+	for idx, catID := range req.CategoryIDs {
+		if catID != "" {
+			_, _ = tx.Exec(ctx, `
+				INSERT INTO menu_schedule_categories (schedule_id, category_id, display_order)
+				VALUES ($1, $2, $3)
+				ON CONFLICT DO NOTHING
+			`, scheduleID, catID, idx+1)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit menu schedule")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Created menu schedule: %s (%s-%s)", req.Name, req.StartTime, req.EndTime), r)
+	RespondJSON(w, http.StatusCreated, map[string]interface{}{"status": "success", "id": scheduleID})
+}
+
+// UpdateMenuSchedule updates a schedule and its assigned categories
+func (h *HandlerContext) UpdateMenuSchedule(w http.ResponseWriter, r *http.Request) {
+	adminID, ok := r.Context().Value("user_id").(string)
+	if !ok || adminID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	scheduleID := chi.URLParam(r, "id")
+	if scheduleID == "" {
+		RespondError(w, http.StatusBadRequest, "schedule id required")
+		return
+	}
+
+	var req struct {
+		Name         string   `json:"name"`
+		StartTime    string   `json:"start_time"`
+		EndTime      string   `json:"end_time"`
+		IsEnabled    bool     `json:"is_enabled"`
+		DisplayOrder int      `json:"display_order"`
+		CategoryIDs  []string `json:"category_ids"`
+	}
+	if err := jsonNewDecoder(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := h.DB.Pool.Begin(ctx)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
+		UPDATE menu_schedules
+		SET name = $1, start_time = $2::TIME, end_time = $3::TIME, is_enabled = $4, display_order = $5, updated_at = NOW()
+		WHERE id = $6
+	`, req.Name, req.StartTime, req.EndTime, req.IsEnabled, req.DisplayOrder, scheduleID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to update schedule: "+err.Error())
+		return
+	}
+
+	_, _ = tx.Exec(ctx, `DELETE FROM menu_schedule_categories WHERE schedule_id = $1`, scheduleID)
+
+	for idx, catID := range req.CategoryIDs {
+		if catID != "" {
+			_, _ = tx.Exec(ctx, `
+				INSERT INTO menu_schedule_categories (schedule_id, category_id, display_order)
+				VALUES ($1, $2, $3)
+				ON CONFLICT DO NOTHING
+			`, scheduleID, catID, idx+1)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to commit schedule update")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Updated menu schedule: %s", req.Name), r)
+	RespondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// DeleteMenuSchedule removes a schedule
+func (h *HandlerContext) DeleteMenuSchedule(w http.ResponseWriter, r *http.Request) {
+	adminID, ok := r.Context().Value("user_id").(string)
+	if !ok || adminID == "" {
+		RespondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	scheduleID := chi.URLParam(r, "id")
+	if scheduleID == "" {
+		RespondError(w, http.StatusBadRequest, "schedule id required")
+		return
+	}
+
+	ctx := r.Context()
+	_, err := h.DB.Pool.Exec(ctx, `DELETE FROM menu_schedules WHERE id = $1`, scheduleID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to delete schedule")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Deleted menu schedule: %s", scheduleID), r)
+	RespondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+
 

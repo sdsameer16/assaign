@@ -202,7 +202,7 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 	err = db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM categories`).Scan(&catCount)
 	if err == nil && catCount == 0 {
 		// Insert Categories
-		categories := []string{"Snacks", "Beverages", "Meals"}
+		categories := []string{"Snacks", "Beverages", "Meals", "Ice Creams"}
 		catIDs := make(map[string]string)
 
 		for _, name := range categories {
