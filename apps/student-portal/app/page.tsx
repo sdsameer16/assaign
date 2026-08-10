@@ -2257,7 +2257,9 @@ export default function StudentPortal() {
               exit={{ opacity: 0 }}
               onClick={() => setIsCartOpen(false)}
               onTouchMove={(e) => e.preventDefault()}
-              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm touch-none"
+              className={`absolute inset-0 backdrop-blur-sm touch-none transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/70" : "bg-slate-900/40"
+              }`}
             />
 
             {/* Cart Drawer Panel */}
@@ -2266,246 +2268,301 @@ export default function StudentPortal() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="absolute top-[145px] sm:top-[85px] bottom-3 right-2 sm:right-4 left-auto w-[min(88vw,360px)] max-w-sm bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-y-auto scrollbar-thin z-50 p-4 space-y-4"
+              className={`absolute top-[145px] sm:top-[85px] bottom-3 right-2 sm:right-4 left-auto w-[min(88vw,360px)] max-w-sm border rounded-3xl shadow-2xl flex flex-col overflow-y-auto scrollbar-thin z-50 p-4 space-y-4 transition-colors duration-300 ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-100"
+                  : "bg-white border-slate-200 text-slate-900"
+              }`}
             >
               {/* Cart Drawer Header */}
-              <div className="pb-3 border-b border-slate-800 flex items-center justify-between">
+              <div className={`pb-3 border-b flex items-center justify-between transition-colors ${
+                theme === "dark" ? "border-slate-800" : "border-slate-200"
+              }`}>
                 <div className="flex items-center space-x-2">
-                  <ShoppingBag className="w-5 h-5 text-orange-400" />
-                  <h3 className="text-base font-extrabold text-white">Your Campus Cart</h3>
-                  <span className="bg-slate-800 text-slate-300 text-xs font-bold px-2 py-0.5 rounded-full">
+                  <ShoppingBag className="w-5 h-5 text-orange-500" />
+                  <h3 className={`text-base font-extrabold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Your Campus Cart</h3>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"
+                  }`}>
                     {getCartItemCount()} items
                   </span>
                 </div>
                 <button
                   onClick={() => setIsCartOpen(false)}
-                  className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition"
+                  className={`p-1.5 rounded-xl transition ${
+                    theme === "dark"
+                      ? "text-slate-400 hover:text-white hover:bg-slate-800"
+                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                  }`}
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-                {/* Free Delivery Progress Bar */}
-                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 space-y-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    {getSubtotal() >= freeDeliveryThreshold ? (
-                      <span className="text-emerald-400">🎉 FREE DELIVERY UNLOCKED!</span>
-                    ) : (
-                      <span className="text-slate-300">
-                        🚚 Add ₹{freeDeliveryThreshold - getSubtotal()} more to unlock FREE DELIVERY
-                      </span>
-                    )}
-                    <span className="text-orange-400">₹{getSubtotal()} / ₹{freeDeliveryThreshold}</span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-300"
-                      style={{
-                        width: `${Math.min(100, (getSubtotal() / freeDeliveryThreshold) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
 
-                {/* Saved Address Info inside Cart */}
-                <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[10px] uppercase font-extrabold tracking-wider flex items-center space-x-1">
-                      <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                      <span>Floor Corridor Delivery Address</span>
+              {/* Free Delivery Progress Bar */}
+              <div className={`border rounded-2xl p-3 space-y-2 transition-colors ${
+                theme === "dark" ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex justify-between text-xs font-bold">
+                  {getSubtotal() >= freeDeliveryThreshold ? (
+                    <span className="text-emerald-500 font-extrabold">🎉 FREE DELIVERY UNLOCKED!</span>
+                  ) : (
+                    <span className={theme === "dark" ? "text-slate-300" : "text-slate-700"}>
+                      🚚 Add ₹{freeDeliveryThreshold - getSubtotal()} more to unlock FREE DELIVERY
                     </span>
-                    <button
-                      onClick={() => setShowAddressModal(true)}
-                      className="text-orange-400 hover:underline font-bold text-[11px]"
-                    >
-                      Change Address
-                    </button>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-slate-500 text-[10px] block">Block / Building</span>
-                      <span className="font-bold text-white leading-tight block">{building || "Main Campus"}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 text-[10px] block">Floor & Room</span>
-                      <span className="font-extrabold text-orange-400 leading-tight block">
-                        Floor {floor} • Room {roomNumber || "Not Set"}
-                      </span>
-                    </div>
-                  </div>
+                  )}
+                  <span className="text-orange-500 font-bold">₹{getSubtotal()} / ₹{freeDeliveryThreshold}</span>
                 </div>
+                <div className={`w-full h-2 rounded-full overflow-hidden ${
+                  theme === "dark" ? "bg-slate-800" : "bg-slate-200"
+                }`}>
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, (getSubtotal() / freeDeliveryThreshold) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
 
-                {/* Delivery Slot Selection */}
-                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3">
-                  <label className="text-xs font-bold text-slate-300 block mb-2">Select Delivery Slot</label>
-                  <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                    {deliverySlots.filter((s) => s.is_active).length > 0 ? (
-                      deliverySlots
-                        .filter((s) => s.is_active)
-                        .map((slot) => {
-                          // Auto-select open slot if selectedSlotId is empty
-                          const openSlot = deliverySlots.find((s) => s.is_ordering_open && s.is_active);
-                          const isSelected = selectedSlotId === slot.id || (!selectedSlotId && openSlot?.id === slot.id);
-                          return (
-                            <button
-                              key={slot.id}
-                              onClick={() => setSelectedSlotId(slot.id)}
-                              disabled={!slot.is_ordering_open}
-                              className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${isSelected
-                                ? "bg-orange-500 text-slate-950 border-orange-500"
-                                : slot.is_ordering_open
-                                  ? "bg-slate-900 text-slate-300 border-slate-700 hover:border-orange-500/50"
-                                  : "bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed"
-                                }`}
-                            >
-                              <div className="flex flex-col items-center space-y-0.5">
-                                <span>{slot.name}</span>
-                                <span className="text-[10px] font-medium opacity-80">
-                                  {slot.delivery_start} - {slot.delivery_end}
-                                </span>
-                                <span className="text-[9px] font-medium opacity-70 text-orange-200">
-                                  Order before {slot.order_cutoff}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })
-                    ) : (
-                      <span className="text-xs text-slate-500 italic">No delivery slots available today.</span>
-                    )}
+              {/* Saved Address Info inside Cart */}
+              <div className={`border rounded-2xl p-3 text-xs space-y-1.5 transition-colors ${
+                theme === "dark" ? "bg-slate-950/90 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] uppercase font-extrabold tracking-wider flex items-center space-x-1 ${
+                    theme === "dark" ? "text-slate-400" : "text-slate-500"
+                  }`}>
+                    <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                    <span>Floor Corridor Delivery Address</span>
+                  </span>
+                  <button
+                    onClick={() => setShowAddressModal(true)}
+                    className="text-orange-500 hover:underline font-bold text-[11px]"
+                  >
+                    Change Address
+                  </button>
+                </div>
+                <div className={`border rounded-xl p-2.5 grid grid-cols-2 gap-2 text-xs transition-colors ${
+                  theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+                }`}>
+                  <div>
+                    <span className={`text-[10px] block ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>Block / Building</span>
+                    <span className={`font-bold leading-tight block ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{building || "Main Campus"}</span>
+                  </div>
+                  <div>
+                    <span className={`text-[10px] block ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>Floor & Room</span>
+                    <span className="font-extrabold text-orange-500 leading-tight block">
+                      Floor {floor} • Room {roomNumber || "Not Set"}
+                    </span>
                   </div>
                 </div>
-                {getCartItemCount() === 0 ? (
-                  <div className="text-center py-12 space-y-4">
-                    <ShoppingBasket className="w-12 h-12 text-slate-700 mx-auto" />
-                    <div>
-                      <h4 className="text-base font-bold text-white">Your cart is hungry!</h4>
-                      <p className="text-xs text-slate-400">Discover breakfast, biryani, meals & snacks.</p>
-                    </div>
-                    <button
-                      onClick={scrollToMenu}
-                      className="bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs"
-                    >
-                      Explore Menu
-                    </button>
+              </div>
+
+              {/* Delivery Slot Selection */}
+              <div className={`border rounded-2xl p-3 transition-colors ${
+                theme === "dark" ? "bg-slate-950/80 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <label className={`text-xs font-bold block mb-2 ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}>Select Delivery Slot</label>
+                <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {deliverySlots.filter((s) => s.is_active).length > 0 ? (
+                    deliverySlots
+                      .filter((s) => s.is_active)
+                      .map((slot) => {
+                        const openSlot = deliverySlots.find((s) => s.is_ordering_open && s.is_active);
+                        const isSelected = selectedSlotId === slot.id || (!selectedSlotId && openSlot?.id === slot.id);
+                        return (
+                          <button
+                            key={slot.id}
+                            onClick={() => setSelectedSlotId(slot.id)}
+                            disabled={!slot.is_ordering_open}
+                            className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                              isSelected
+                                ? "bg-orange-500 text-white border-orange-500 shadow-md"
+                                : slot.is_ordering_open
+                                  ? theme === "dark"
+                                    ? "bg-slate-900 text-slate-300 border-slate-700 hover:border-orange-500/50"
+                                    : "bg-white text-slate-800 border-slate-300 hover:border-orange-500/50 shadow-sm"
+                                  : theme === "dark"
+                                    ? "bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed"
+                                    : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                              }`}
+                          >
+                            <div className="flex flex-col items-center space-y-0.5">
+                              <span>{slot.name}</span>
+                              <span className="text-[10px] font-medium opacity-80">
+                                {slot.delivery_start} - {slot.delivery_end}
+                              </span>
+                              <span className={`text-[9px] font-medium ${isSelected ? "text-orange-100" : "text-orange-500"}`}>
+                                Order before {slot.order_cutoff}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                  ) : (
+                    <span className={`text-xs italic ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>No delivery slots available today.</span>
+                  )}
+                </div>
+              </div>
+              {getCartItemCount() === 0 ? (
+                <div className="text-center py-12 space-y-4">
+                  <ShoppingBasket className={`w-12 h-12 mx-auto ${theme === "dark" ? "text-slate-700" : "text-slate-300"}`} />
+                  <div>
+                    <h4 className={`text-base font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Your cart is hungry!</h4>
+                    <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Discover breakfast, biryani, meals & snacks.</p>
                   </div>
-                ) : (
-                  <>
-                    {/* Food Items */}
-                    {Object.entries(cart).map(([prodId, qty]) => {
-                      const prod = products.find((p) => p.id === prodId);
-                      if (!prod) return null;
-                      return (
-                        <div
-                          key={prodId}
-                          className="bg-slate-950 border border-slate-800 rounded-2xl p-3 flex items-center justify-between space-x-3"
-                        >
-                          <img
-                            src={prod.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=150&q=80"}
-                            alt={prod.name}
-                            className="w-14 h-14 rounded-xl object-cover shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <h5 className="text-xs font-bold text-white truncate">{prod.name}</h5>
-                            <p className="text-xs font-extrabold text-orange-400">₹{prod.selling_price * qty}</p>
-                          </div>
-                          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl p-1">
-                            <button onClick={() => removeFromCart(prodId)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white">
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <span className="text-xs font-bold text-white px-1">{qty}</span>
-                            <button onClick={() => addToCart(prodId)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white">
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <button onClick={() => deleteItemFromCart(prodId)} className="text-slate-500 hover:text-red-400 p-1">
-                            <Trash2 className="w-4 h-4" />
+                  <button
+                    onClick={scrollToMenu}
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-md transition"
+                  >
+                    Explore Menu
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Food Items */}
+                  {Object.entries(cart).map(([prodId, qty]) => {
+                    const prod = products.find((p) => p.id === prodId);
+                    if (!prod) return null;
+                    return (
+                      <div
+                        key={prodId}
+                        className={`border rounded-2xl p-3 flex items-center justify-between space-x-3 transition-colors ${
+                          theme === "dark" ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                        }`}
+                      >
+                        <img
+                          src={prod.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=150&q=80"}
+                          alt={prod.name}
+                          className="w-14 h-14 rounded-xl object-cover shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h5 className={`text-xs font-bold truncate ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{prod.name}</h5>
+                          <p className="text-xs font-extrabold text-orange-500">₹{prod.selling_price * qty}</p>
+                        </div>
+                        <div className={`flex items-center space-x-2 border rounded-xl p-1 transition-colors ${
+                          theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+                        }`}>
+                          <button onClick={() => removeFromCart(prodId)} className={`w-6 h-6 flex items-center justify-center transition ${
+                            theme === "dark" ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
+                          }`}>
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className={`text-xs font-bold px-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{qty}</span>
+                          <button onClick={() => addToCart(prodId)} className={`w-6 h-6 flex items-center justify-center transition ${
+                            theme === "dark" ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
+                          }`}>
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      );
-                    })}
-
-                    {/* Print Jobs */}
-                    {printJobs.map((job) => (
-                      <div
-                        key={job.localId}
-                        className="bg-indigo-950/40 border border-indigo-800/80 rounded-2xl p-3 flex items-center justify-between space-x-3"
-                      >
-                        <Printer className="w-8 h-8 text-indigo-400 shrink-0" />
-                        <div className="flex-1 min-w-0 text-xs">
-                          <h5 className="font-bold text-white truncate">{job.file_name}</h5>
-                          <p className="text-[11px] text-slate-400">
-                            {job.page_count} pages • {job.color_mode.toUpperCase()} • {job.copies} copies
-                          </p>
-                          <p className="font-extrabold text-indigo-300">₹{job.line_total}</p>
-                        </div>
-                        <button onClick={() => removePrintJob(job.localId)} className="text-slate-500 hover:text-red-400 p-1">
+                        <button onClick={() => deleteItemFromCart(prodId)} className="text-slate-400 hover:text-red-500 p-1 transition">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    ))}
+                    );
+                  })}
 
-                    {/* Recommendations inside Cart ("Complete your meal") */}
-                    <div className="pt-4 border-t border-slate-800 space-y-3">
-                      <h5 className="text-xs font-extrabold text-white flex items-center space-x-1">
-                        <span>Complete your meal 😋</span>
-                      </h5>
-                      <div className="grid grid-cols-2 gap-2">
-                        {products.slice(0, 2).map((rec) => (
-                          <div key={rec.id} className="bg-slate-950 border border-slate-800 rounded-xl p-2 flex items-center justify-between text-xs">
-                            <div className="truncate pr-1">
-                              <span className="font-bold text-white block truncate">{rec.name}</span>
-                              <span className="text-orange-400 font-bold">₹{rec.selling_price}</span>
-                            </div>
-                            <button
-                              onClick={() => addToCart(rec.id)}
-                              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px] px-2 py-1 rounded-lg shrink-0"
-                            >
-                              + Add
-                            </button>
-                          </div>
-                        ))}
+                  {/* Print Jobs */}
+                  {printJobs.map((job) => (
+                    <div
+                      key={job.localId}
+                      className={`border rounded-2xl p-3 flex items-center justify-between space-x-3 transition-colors ${
+                        theme === "dark" ? "bg-indigo-950/40 border-indigo-800/80" : "bg-indigo-50/70 border-indigo-200"
+                      }`}
+                    >
+                      <Printer className="w-8 h-8 text-indigo-500 shrink-0" />
+                      <div className="flex-1 min-w-0 text-xs">
+                        <h5 className={`font-bold truncate ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{job.file_name}</h5>
+                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
+                          {job.page_count} pages • {job.color_mode.toUpperCase()} • {job.copies} copies
+                        </p>
+                        <p className={`font-extrabold ${theme === "dark" ? "text-indigo-300" : "text-indigo-600"}`}>₹{job.line_total}</p>
                       </div>
+                      <button onClick={() => removePrintJob(job.localId)} className="text-slate-400 hover:text-red-500 p-1 transition">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  </>
-                )}
+                  ))}
+
+                  {/* Recommendations inside Cart ("Complete your meal") */}
+                  <div className={`pt-4 border-t space-y-3 transition-colors ${theme === "dark" ? "border-slate-800" : "border-slate-200"}`}>
+                    <h5 className={`text-xs font-extrabold flex items-center space-x-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                      <span>Complete your meal 😋</span>
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2">
+                      {products.slice(0, 2).map((rec) => (
+                        <div key={rec.id} className={`border rounded-xl p-2 flex items-center justify-between text-xs transition-colors ${
+                          theme === "dark" ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                        }`}>
+                          <div className="truncate pr-1">
+                            <span className={`font-bold block truncate ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{rec.name}</span>
+                            <span className="text-orange-500 font-bold">₹{rec.selling_price}</span>
+                          </div>
+                          <button
+                            onClick={() => addToCart(rec.id)}
+                            className={`font-bold text-[10px] px-2 py-1 rounded-lg shrink-0 transition ${
+                              theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-200" : "bg-slate-200 hover:bg-slate-300 text-slate-800"
+                            }`}
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Cart Drawer Footer & Checkout */}
               {getCartItemCount() > 0 && (
-                <div className="p-5 border-t border-slate-800 bg-slate-950 space-y-3">
+                <div className={`p-5 border-t rounded-2xl space-y-3 transition-colors ${
+                  theme === "dark" ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-slate-50"
+                }`}>
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between text-slate-400">
+                    <div className={`flex justify-between ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
                       <span>Subtotal</span>
                       <span>₹{getSubtotal()}</span>
                     </div>
-                    <div className="flex justify-between text-slate-400">
+                    <div className={`flex justify-between ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
                       <span>Corridor Delivery Fee</span>
                       <span>{currentDeliveryFee === 0 ? "FREE" : `₹${currentDeliveryFee}`}</span>
                     </div>
 
-                    <div className="flex justify-between text-base font-extrabold text-white pt-2 border-t border-slate-800">
+                    <div className={`flex justify-between text-base font-extrabold pt-2 border-t transition-colors ${
+                      theme === "dark" ? "text-white border-slate-800" : "text-slate-900 border-slate-200"
+                    }`}>
                       <span>Total Amount</span>
-                      <span className="text-orange-400">₹{getFinalTotal()}</span>
+                      <span className="text-orange-500">₹{getFinalTotal()}</span>
                     </div>
                   </div>
 
                   {/* Cutoff / Maintenance Warning Banner above Proceed to Pay */}
                   {is0001CutoffMode ? (
-                    <div className="p-4 bg-gradient-to-br from-orange-950/80 via-amber-950/70 to-slate-900 border border-orange-500/40 rounded-2xl text-center space-y-2 shadow-xl backdrop-blur-sm">
-                      <div className="font-black text-sm text-orange-400 flex items-center justify-center gap-1.5">
+                    <div className={`p-4 border rounded-2xl text-center space-y-2 shadow-xl backdrop-blur-sm transition-colors ${
+                      theme === "dark"
+                        ? "bg-gradient-to-br from-orange-950/80 via-amber-950/70 to-slate-900 border-orange-500/40"
+                        : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100/50 border-orange-300"
+                    }`}>
+                      <div className="font-black text-sm text-orange-500 flex items-center justify-center gap-1.5">
                         <span>🚀 Something BIG is Cooking!</span>
                       </div>
-                      <p className="text-xs text-slate-200 font-medium leading-relaxed">
+                      <p className={`text-xs font-medium leading-relaxed ${theme === "dark" ? "text-slate-200" : "text-slate-700"}`}>
                         We&apos;re taking a short break today to bring you something even better.
                         <br />
                         CampusBites will be back tomorrow! ❤️
                       </p>
-                      <p className="text-[11px] text-amber-300 font-bold italic pt-0.5">
+                      <p className="text-[11px] text-amber-500 font-bold italic pt-0.5">
                         Stay tuned — we&apos;ve got something special coming your way. 🔥
                       </p>
                     </div>
                   ) : isOrderingClosed ? (
-                    <div className="p-3.5 bg-red-950/60 border border-red-500/40 rounded-2xl text-center shadow-lg">
-                      <span className="text-xs font-bold text-red-300 block leading-relaxed">
+                    <div className={`p-3.5 border rounded-2xl text-center shadow-lg transition-colors ${
+                      theme === "dark"
+                        ? "bg-red-950/60 border-red-500/40 text-red-300"
+                        : "bg-red-50 border-red-200 text-red-700"
+                    }`}>
+                      <span className="text-xs font-bold block leading-relaxed">
                         🌙 Ordering is closed right now! All delivery slots for today have passed their cutoff time. Please check back tomorrow morning.
                       </span>
                     </div>
@@ -2514,7 +2571,11 @@ export default function StudentPortal() {
                   <div className="flex space-x-2">
                     <button
                       onClick={scrollToMenu}
-                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs border border-slate-700 transition"
+                      className={`w-1/2 font-bold py-3 rounded-xl text-xs border transition ${
+                        theme === "dark"
+                          ? "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                          : "bg-white hover:bg-slate-100 text-slate-700 border-slate-300"
+                      }`}
                     >
                       + Add More Items
                     </button>
@@ -2523,8 +2584,10 @@ export default function StudentPortal() {
                       disabled={checkoutLoading || is0001CutoffMode || isOrderingClosed}
                       className={`w-1/2 font-extrabold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-lg transition ${
                         is0001CutoffMode || isOrderingClosed
-                          ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
-                          : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950"
+                          ? theme === "dark"
+                            ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+                          : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white"
                       }`}
                     >
                       {checkoutLoading ? (
@@ -2544,27 +2607,47 @@ export default function StudentPortal() {
       {/* Saved Location Modal */}
       <AnimatePresence>
         {showAddressModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAddressModal(false)}
+              className={`absolute inset-0 backdrop-blur-sm transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/80" : "bg-slate-900/40"
+              }`}
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-3xl p-4 md:p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+              className={`relative max-w-sm w-full rounded-3xl p-4 md:p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto border z-10 transition-colors ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-100"
+                  : "bg-white border-slate-200 text-slate-900"
+              }`}
             >
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-white">Saved Delivery Location</h3>
-                <button onClick={() => setShowAddressModal(false)} className="text-slate-400 hover:text-white">
+                <h3 className={`text-lg font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Saved Delivery Location</h3>
+                <button
+                  onClick={() => setShowAddressModal(false)}
+                  className={`p-1 rounded-lg transition ${theme === "dark" ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">Building / Hostel Block</label>
+                  <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Building / Hostel Block</label>
                   <select
                     value={building}
                     onChange={(e) => setBuilding(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none"
+                    className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
+                      theme === "dark"
+                        ? "bg-slate-950 border-slate-800 text-slate-100"
+                        : "bg-slate-50 border-slate-300 text-slate-900"
+                    }`}
                   >
                     <option value="N Block">N Block</option>
                     <option value="A Block">A Block</option>
@@ -2572,37 +2655,44 @@ export default function StudentPortal() {
                     <option value="U Block">U Block</option>
                     <option value="Lara">Lara</option>
                     <option value="Pharmacy">Pharmacy</option>
-
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">Floor Number</label>
+                  <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Floor Number</label>
                   <input
                     type="number"
                     min={0}
                     max={10}
                     value={floor}
                     onChange={(e) => setFloor(parseInt(e.target.value, 10) || 0)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none"
+                    className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
+                      theme === "dark"
+                        ? "bg-slate-950 border-slate-800 text-slate-100"
+                        : "bg-slate-50 border-slate-300 text-slate-900"
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">Room Number</label>
+                  <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Room Number</label>
                   <input
                     type="text"
                     value={roomNumber}
                     onChange={(e) => setRoomNumber(e.target.value)}
                     placeholder="501"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none"
+                    className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
+                      theme === "dark"
+                        ? "bg-slate-950 border-slate-800 text-slate-100"
+                        : "bg-slate-50 border-slate-300 text-slate-900"
+                    }`}
                   />
                 </div>
               </div>
 
               <button
                 onClick={() => saveDeliveryAddress(building, floor, roomNumber)}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs shadow-md"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition"
               >
                 Save Delivery Location
               </button>
@@ -2614,36 +2704,58 @@ export default function StudentPortal() {
       {/* Printing Modal */}
       <AnimatePresence>
         {showPrintingsModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPrintingsModal(false)}
+              className={`absolute inset-0 backdrop-blur-sm transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/80" : "bg-slate-900/40"
+              }`}
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-indigo-900/60 max-w-lg w-full rounded-3xl p-4 md:p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+              className={`relative max-w-lg w-full rounded-3xl p-4 md:p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto border z-10 transition-colors ${
+                theme === "dark"
+                  ? "bg-slate-900 border-indigo-900/60 text-slate-100"
+                  : "bg-white border-indigo-100 text-slate-900"
+              }`}
             >
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
-                  <Printer className="w-5 h-5 text-indigo-400" />
-                  <h3 className="text-lg font-bold text-white">Campus Printing Service</h3>
+                  <Printer className="w-5 h-5 text-indigo-500" />
+                  <h3 className={`text-lg font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Campus Printing Service</h3>
                 </div>
-                <button onClick={() => setShowPrintingsModal(false)} className="text-slate-400 hover:text-white">
+                <button
+                  onClick={() => setShowPrintingsModal(false)}
+                  className={`p-1 rounded-lg transition ${theme === "dark" ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-4 text-xs">
-                <div className="bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-4 text-center space-y-2">
-                  <p className="text-indigo-300 font-bold">Upload PDF or Document File</p>
-                  <p className="text-slate-400 text-[11px]">Accepted: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</p>
+                <div className={`border rounded-2xl p-4 text-center space-y-2 transition-colors ${
+                  theme === "dark"
+                    ? "bg-indigo-950/40 border-indigo-800/60"
+                    : "bg-indigo-50/70 border-indigo-200"
+                }`}>
+                  <p className={`font-bold ${theme === "dark" ? "text-indigo-300" : "text-indigo-700"}`}>Upload PDF or Document File</p>
+                  <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Accepted: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</p>
                   <input
                     type="file"
                     multiple
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
                     onChange={handlePrintFilesSelected}
-                    className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"
+                    className={`block w-full text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer ${
+                      theme === "dark" ? "text-slate-400" : "text-slate-600"
+                    }`}
                   />
                   {printUploading && (
-                    <div className="flex items-center justify-center space-x-2 text-indigo-300 text-xs">
+                    <div className="flex items-center justify-center space-x-2 text-indigo-500 text-xs">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span>Processing file & calculating pages...</span>
                     </div>
@@ -2653,9 +2765,13 @@ export default function StudentPortal() {
                 {printDraftFiles.length > 0 && (
                   <div className="space-y-2">
                     {printDraftFiles.map((file, idx) => (
-                      <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-200 truncate max-w-[200px]">{file.file_name}</span>
-                        <span className="bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                      <div key={idx} className={`border rounded-xl p-2.5 flex justify-between items-center text-xs transition-colors ${
+                        theme === "dark" ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                      }`}>
+                        <span className={`font-bold truncate max-w-[200px] ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{file.file_name}</span>
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
+                          theme === "dark" ? "bg-indigo-950 text-indigo-300" : "bg-indigo-100 text-indigo-800"
+                        }`}>
                           {file.page_count} Pages
                         </span>
                       </div>
@@ -2663,22 +2779,30 @@ export default function StudentPortal() {
 
                     <div className="grid grid-cols-2 gap-3 pt-2">
                       <div>
-                        <label className="block text-slate-400 font-bold mb-1">Color Mode</label>
+                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Color Mode</label>
                         <select
                           value={printColorMode}
                           onChange={(e) => setPrintColorMode(e.target.value as PrintColorMode)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200"
+                          className={`w-full rounded-xl px-3 py-2 border transition ${
+                            theme === "dark"
+                              ? "bg-slate-950 border-slate-800 text-slate-200"
+                              : "bg-slate-50 border-slate-300 text-slate-900"
+                          }`}
                         >
                           <option value="bw">B&W (Black & White)</option>
                           <option value="color">Color</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-400 font-bold mb-1">Sides</label>
+                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Sides</label>
                         <select
                           value={printSides}
                           onChange={(e) => setPrintSides(e.target.value as PrintSides)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200"
+                          className={`w-full rounded-xl px-3 py-2 border transition ${
+                            theme === "dark"
+                              ? "bg-slate-950 border-slate-800 text-slate-200"
+                              : "bg-slate-50 border-slate-300 text-slate-900"
+                          }`}
                         >
                           <option value="single">Single Sided</option>
                           <option value="double">Double Sided</option>
@@ -2686,9 +2810,11 @@ export default function StudentPortal() {
                       </div>
                     </div>
 
-                    <div className="pt-2 flex justify-between items-center border-t border-slate-800">
-                      <span className="font-bold text-slate-300">Total Print Price:</span>
-                      <span className="text-lg font-black text-indigo-400">₹{getPrintPreviewTotal()}</span>
+                    <div className={`pt-2 flex justify-between items-center border-t transition-colors ${
+                      theme === "dark" ? "border-slate-800" : "border-slate-200"
+                    }`}>
+                      <span className={`font-bold ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}>Total Print Price:</span>
+                      <span className="text-lg font-black text-indigo-500">₹{getPrintPreviewTotal()}</span>
                     </div>
                   </div>
                 )}
@@ -2697,7 +2823,7 @@ export default function StudentPortal() {
               <button
                 onClick={addPrintJobsToCart}
                 disabled={printDraftFiles.length === 0 || printUploading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-xs disabled:opacity-40 shadow-md"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-xs disabled:opacity-40 shadow-md transition"
               >
                 Add Print Jobs to Cart
               </button>
@@ -2709,86 +2835,120 @@ export default function StudentPortal() {
       {/* Order History & Ratings/Reviews Modal */}
       <AnimatePresence>
         {showHistoryModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowHistoryModal(false)}
+              className={`absolute inset-0 backdrop-blur-sm transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/80" : "bg-slate-900/40"
+              }`}
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-slate-800 max-w-2xl w-full rounded-3xl p-4 md:p-6 space-y-5 shadow-2xl max-h-[90vh] flex flex-col"
+              className={`relative max-w-2xl w-full rounded-3xl p-4 md:p-6 space-y-5 shadow-2xl max-h-[90vh] flex flex-col border z-10 transition-colors ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-100"
+                  : "bg-white border-slate-200 text-slate-900"
+              }`}
             >
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div className={`flex justify-between items-center border-b pb-3 transition-colors ${
+                theme === "dark" ? "border-slate-800" : "border-slate-200"
+              }`}>
                 <div className="flex items-center space-x-2">
-                  <Clock className="w-5 h-5 text-orange-400" />
-                  <h3 className="text-lg font-bold text-white">Order History & Reviews</h3>
+                  <Clock className="w-5 h-5 text-orange-500" />
+                  <h3 className={`text-lg font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Order History & Reviews</h3>
                 </div>
-                <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white">
+                <button
+                  onClick={() => setShowHistoryModal(false)}
+                  className={`p-1 rounded-lg transition ${theme === "dark" ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-4 pr-1">
                 {orderHistory.length === 0 ? (
-                  <div className="text-center py-10 text-slate-500 text-xs">
+                  <div className={`text-center py-10 text-xs ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>
                     No past orders found. Start ordering from the menu!
                   </div>
                 ) : (
                   orderHistory.map((ord) => (
-                    <div key={ord.id} className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div key={ord.id} className={`border rounded-2xl p-4 space-y-3 transition-colors ${
+                      theme === "dark" ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                    }`}>
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-wider block">
+                          <span className="text-[10px] font-extrabold text-orange-500 uppercase tracking-wider block">
                             Order #{ord.order_number}
                           </span>
-                          <span className="text-[11px] text-slate-400">
+                          <span className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
                             {new Date(ord.created_at).toLocaleString()}
                           </span>
                         </div>
-                        <span className="bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
+                          theme === "dark"
+                            ? "bg-slate-800 text-slate-300 border-slate-700"
+                            : "bg-slate-200 text-slate-700 border-slate-300"
+                        }`}>
                           {ord.status.replace(/_/g, " ")}
                         </span>
                       </div>
                       {/* Structured Delivery Location Card */}
-                      <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5 text-xs space-y-1">
-                        <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                      <div className={`border rounded-xl p-2.5 text-xs space-y-1 transition-colors ${
+                        theme === "dark" ? "bg-slate-900/60 border-slate-800/80" : "bg-white border-slate-200"
+                      }`}>
+                        <div className={`flex items-center justify-between text-[9px] font-bold uppercase tracking-wider ${
+                          theme === "dark" ? "text-slate-400" : "text-slate-500"
+                        }`}>
                           <span>Delivery Destination</span>
                           <span>Floor {ord.floor}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
-                            <span className="text-[9px] text-slate-500 block">Hostel Block</span>
-                            <span className="font-bold text-white">{ord.building}</span>
+                            <span className={`text-[9px] block ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>Hostel Block</span>
+                            <span className={`font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{ord.building}</span>
                           </div>
                           <div>
-                            <span className="text-[9px] text-slate-500 block">Room Number</span>
-                            <span className="font-bold text-orange-400">Room {ord.room_number}</span>
+                            <span className={`text-[9px] block ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>Room Number</span>
+                            <span className="font-bold text-orange-500">Room {ord.room_number}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded-xl">
+                      <div className={`text-xs space-y-1 p-2.5 rounded-xl border transition-colors ${
+                        theme === "dark"
+                          ? "bg-slate-900/60 border-slate-800 text-slate-300"
+                          : "bg-white border-slate-200 text-slate-700"
+                      }`}>
                         {ord.items && ord.items.map((it: any, i: number) => (
                           <div key={i} className="flex justify-between">
                             <span>{it.quantity}x {it.product_name || "Food Item"}</span>
-                            <span className="font-bold text-slate-400">₹{it.price * it.quantity}</span>
+                            <span className={`font-bold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>₹{it.price * it.quantity}</span>
                           </div>
                         ))}
-                        <div className="pt-1.5 border-t border-slate-800 flex justify-between font-extrabold text-white">
+                        <div className={`pt-1.5 border-t flex justify-between font-extrabold ${
+                          theme === "dark" ? "border-slate-800 text-white" : "border-slate-200 text-slate-900"
+                        }`}>
                           <span>Total Amount</span>
-                          <span className="text-orange-400">₹{ord.total_amount}</span>
+                          <span className="text-orange-500">₹{ord.total_amount}</span>
                         </div>
                       </div>
 
                       {/* Rating & Review Action */}
                       {ord.status === "delivered" && (
                         <div className="pt-1 flex items-center justify-between">
-                          <span className="text-[11px] text-slate-400">Feedback:</span>
+                          <span className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Feedback:</span>
                           <button
                             onClick={() => {
                               setRatingModalOrderID(ord.id);
                               setReviewRating(5);
                               setReviewText("");
                             }}
-                            className="bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 text-xs font-bold px-3 py-1 rounded-xl transition flex items-center space-x-1"
+                            className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 border border-orange-500/30 text-xs font-bold px-3 py-1 rounded-xl transition flex items-center space-x-1"
                           >
                             <span>⭐ Rate & Review Order</span>
                           </button>
@@ -2806,15 +2966,28 @@ export default function StudentPortal() {
       {/* 1-5 Star Review Submission Modal */}
       <AnimatePresence>
         {ratingModalOrderID && (
-          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setRatingModalOrderID(null)}
+              className={`absolute inset-0 backdrop-blur-sm transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/85" : "bg-slate-900/40"
+              }`}
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-3xl p-4 md:p-6 space-y-4 shadow-2xl text-center max-h-[90vh] overflow-y-auto"
+              className={`relative max-w-sm w-full rounded-3xl p-4 md:p-6 space-y-4 shadow-2xl text-center max-h-[90vh] overflow-y-auto border z-10 transition-colors ${
+                theme === "dark"
+                  ? "bg-slate-900 border-slate-800 text-slate-100"
+                  : "bg-white border-slate-200 text-slate-900"
+              }`}
             >
-              <h3 className="text-lg font-bold text-white">Rate your Meal Experience</h3>
-              <p className="text-xs text-slate-400">How was your CampusBites food & floor delivery?</p>
+              <h3 className={`text-lg font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Rate your Meal Experience</h3>
+              <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>How was your CampusBites food & floor delivery?</p>
 
               {/* Star Selector */}
               <div className="flex justify-center space-x-2 py-2">
@@ -2834,14 +3007,22 @@ export default function StudentPortal() {
                 value={reviewText}
                 onChange={(e) => setReviewText(e.target.value)}
                 placeholder="Write your review here (optional)..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 outline-none h-24 resize-none"
+                className={`w-full rounded-xl p-3 text-xs outline-none h-24 resize-none border transition ${
+                  theme === "dark"
+                    ? "bg-slate-950 border-slate-800 text-slate-100"
+                    : "bg-slate-50 border-slate-300 text-slate-900"
+                }`}
               />
 
               <div className="flex space-x-2">
                 <button
                   type="button"
                   onClick={() => setRatingModalOrderID(null)}
-                  className="w-1/3 bg-slate-800 text-slate-400 font-bold py-2.5 rounded-xl text-xs"
+                  className={`w-1/3 font-bold py-2.5 rounded-xl text-xs border transition ${
+                    theme === "dark"
+                      ? "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
+                      : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200"
+                  }`}
                 >
                   Cancel
                 </button>
@@ -2862,7 +3043,7 @@ export default function StudentPortal() {
                       setReviewSubmitting(false);
                     }
                   }}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition"
                 >
                   {reviewSubmitting ? "Submitting..." : "Submit Rating"}
                 </button>
@@ -2881,27 +3062,35 @@ export default function StudentPortal() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowAccountDrawer(false)}
-              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+              className={`absolute inset-0 backdrop-blur-sm transition-colors duration-300 ${
+                theme === "dark" ? "bg-slate-950/80" : "bg-slate-900/40"
+              }`}
             />
             <motion.div
               initial={{ y: 50, opacity: 0, scale: 0.95 }}
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 50, opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 z-10"
+              className={`relative w-full max-w-sm border rounded-3xl p-5 shadow-2xl space-y-4 z-10 transition-colors ${
+                theme === "dark" ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-900"
+              }`}
             >
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className={`flex items-center justify-between border-b pb-3 transition-colors ${
+                theme === "dark" ? "border-slate-800" : "border-slate-200"
+              }`}>
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 flex items-center justify-center font-bold">
                     <User className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">{profile?.short_name || "Student Profile"}</h4>
-                    <p className="text-[11px] text-slate-400">{profile?.mobile_number || "CampusBites Account"}</p>
+                    <h4 className={`text-sm font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{profile?.short_name || "Student Profile"}</h4>
+                    <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{profile?.mobile_number || "CampusBites Account"}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowAccountDrawer(false)}
-                  className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800"
+                  className={`p-1.5 rounded-lg transition ${
+                    theme === "dark" ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                  }`}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -2917,13 +3106,17 @@ export default function StudentPortal() {
                       alert("No active delivery tracking right now. Place an order to track in real-time!");
                     }
                   }}
-                  className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition"
+                  className={`w-full border p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition ${
+                    theme === "dark"
+                      ? "bg-slate-950 hover:bg-slate-800 border-slate-800 text-slate-200"
+                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                  }`}
                 >
                   <div className="flex items-center space-x-2.5">
-                    <Flame className="w-4 h-4 text-orange-400 animate-pulse" />
+                    <Flame className="w-4 h-4 text-orange-500 animate-pulse" />
                     <span>Live Order Tracking</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                  <ChevronRight className={`w-4 h-4 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} />
                 </button>
 
                 <button
@@ -2931,13 +3124,17 @@ export default function StudentPortal() {
                     setShowAccountDrawer(false);
                     toggleTheme();
                   }}
-                  className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition"
+                  className={`w-full border p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition ${
+                    theme === "dark"
+                      ? "bg-slate-950 hover:bg-slate-800 border-slate-800 text-slate-200"
+                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                  }`}
                 >
                   <div className="flex items-center space-x-2.5">
                     {theme === "dark" ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-amber-600" />}
                     <span>Theme ({theme === "dark" ? "Dark Mode" : "Light Mode"})</span>
                   </div>
-                  <span className="text-[10px] text-orange-400 font-bold uppercase">Toggle</span>
+                  <span className="text-[10px] text-orange-500 font-bold uppercase">Toggle</span>
                 </button>
 
                 <button
@@ -2945,13 +3142,17 @@ export default function StudentPortal() {
                     setShowAccountDrawer(false);
                     alert("Support & Helpdesk: Contact CampusBites Canteen Desk at +91 7386055401");
                   }}
-                  className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition"
+                  className={`w-full border p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition ${
+                    theme === "dark"
+                      ? "bg-slate-950 hover:bg-slate-800 border-slate-800 text-slate-200"
+                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                  }`}
                 >
                   <div className="flex items-center space-x-2.5">
-                    <Headphones className="w-4 h-4 text-orange-400" />
+                    <Headphones className="w-4 h-4 text-orange-500" />
                     <span>Help & Canteen Support</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                  <ChevronRight className={`w-4 h-4 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} />
                 </button>
 
                 <button
@@ -2959,7 +3160,7 @@ export default function StudentPortal() {
                     setShowAccountDrawer(false);
                     handleLogout();
                   }}
-                  className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 p-3 rounded-2xl text-xs font-bold flex items-center justify-center space-x-2 transition mt-2"
+                  className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-500 p-3 rounded-2xl text-xs font-bold flex items-center justify-center space-x-2 transition mt-2"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Logout Account</span>
