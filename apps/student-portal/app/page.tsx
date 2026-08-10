@@ -2217,20 +2217,31 @@ export default function StudentPortal() {
               </div>
 
               {/* Saved Address Info inside Cart */}
-              <div className="bg-slate-950/80 border-b border-slate-800 px-5 py-3 flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-2">
-                  <MapPin className="w-4 h-4 text-orange-400 shrink-0" />
+              <div className="bg-slate-950/90 border-b border-slate-800 px-5 py-3 text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-[10px] uppercase font-extrabold tracking-wider flex items-center space-x-1">
+                    <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    <span>Floor Corridor Delivery Address</span>
+                  </span>
+                  <button
+                    onClick={() => setShowAddressModal(true)}
+                    className="text-orange-400 hover:underline font-bold text-[11px]"
+                  >
+                    Change Address
+                  </button>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Delivering to floor corridor</span>
-                    <span className="font-bold text-white">{building}, Floor {floor}, Room {roomNumber || "Not Set"}</span>
+                    <span className="text-slate-500 text-[10px] block">Block / Building</span>
+                    <span className="font-bold text-white leading-tight block">{building || "Main Campus"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[10px] block">Floor & Room</span>
+                    <span className="font-extrabold text-orange-400 leading-tight block">
+                      Floor {floor} • Room {roomNumber || "Not Set"}
+                    </span>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowAddressModal(true)}
-                  className="text-orange-400 hover:underline font-bold text-[11px]"
-                >
-                  Change
-                </button>
               </div>
 
               {/* Delivery Slot Selection */}
@@ -2649,6 +2660,22 @@ export default function StudentPortal() {
                         <span className="bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
                           {ord.status.replace(/_/g, " ")}
                         </span>
+                      {/* Structured Delivery Location Card */}
+                      <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5 text-xs space-y-1">
+                        <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                          <span>Delivery Destination</span>
+                          <span>Floor {ord.floor}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-[9px] text-slate-500 block">Hostel Block</span>
+                            <span className="font-bold text-white">{ord.building}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-500 block">Room Number</span>
+                            <span className="font-bold text-orange-400">Room {ord.room_number}</span>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded-xl">

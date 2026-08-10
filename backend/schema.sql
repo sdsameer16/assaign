@@ -238,6 +238,13 @@ CREATE TABLE IF NOT EXISTS delivery_config (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 17b. System Config Table (Persistent key-value system settings)
+CREATE TABLE IF NOT EXISTS system_config (
+    key VARCHAR(50) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 18. Menu Schedules Table (Admin dynamic time-based category menu schedule)
 CREATE TABLE IF NOT EXISTS menu_schedules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

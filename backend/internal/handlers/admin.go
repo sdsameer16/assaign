@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -289,15 +290,15 @@ func (h *HandlerContext) CreateProduct(w http.ResponseWriter, r *http.Request) {
 func (h *HandlerContext) GetStudents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := `
-		SELECT s.id, s.mobile_number, s.short_name, s.roll_number, s.verification_status::text, s.registered_at, 
-		       sd.id_card_url, sd.ocr_extracted_name, sd.ocr_extracted_roll_number, sd.name_similarity_score, sd.confidence_level::text
+		SELECT s.id::text, s.mobile_number, s.short_name, s.roll_number, COALESCE(s.verification_status::text, 'pending'), s.registered_at, 
+		       COALESCE(sd.id_card_url, ''), COALESCE(sd.ocr_extracted_name, ''), COALESCE(sd.ocr_extracted_roll_number, ''), COALESCE(sd.name_similarity_score, 0.0), COALESCE(sd.confidence_level::text, 'low')
 		FROM students s
 		LEFT JOIN student_documents sd ON s.id = sd.student_id
 		ORDER BY s.registered_at DESC
 	`
 	rows, err := h.DB.Pool.Query(ctx, query)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to query students")
+		RespondError(w, http.StatusInternalServerError, "failed to query students: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -311,26 +312,18 @@ func (h *HandlerContext) GetStudents(w http.ResponseWriter, r *http.Request) {
 		ConfidenceLevel        string  `json:"confidence_level,omitempty"`
 	}
 
-	var records []StudentRecord
+	records := []StudentRecord{}
 	for rows.Next() {
 		var rec StudentRecord
-		var cardURL, ocrName, ocrRoll, conf sql.NullString
-		var sim sql.NullFloat64
-
 		err = rows.Scan(
 			&rec.ID, &rec.MobileNumber, &rec.ShortName, &rec.RollNumber, &rec.VerificationStatus, &rec.RegisteredAt,
-			&cardURL, &ocrName, &ocrRoll, &sim, &conf,
+			&rec.IDCardURL, &rec.OCRExtractedName, &rec.OCRExtractedRollNumber, &rec.NameSimilarityScore, &rec.ConfidenceLevel,
 		)
-		if err == nil {
-			if cardURL.Valid {
-				rec.IDCardURL = cardURL.String
-				rec.OCRExtractedName = ocrName.String
-				rec.OCRExtractedRollNumber = ocrRoll.String
-				rec.NameSimilarityScore = sim.Float64
-				rec.ConfidenceLevel = conf.String
-			}
-			records = append(records, rec)
+		if err != nil {
+			log.Printf("Error scanning student record: %v", err)
+			continue
 		}
+		records = append(records, rec)
 	}
 	RespondJSON(w, http.StatusOK, records)
 }
@@ -371,6 +364,14 @@ func (h *HandlerContext) CreateDeliveryPartner(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	req.Name = strings.TrimSpace(req.Name)
+	req.MobileNumber = strings.TrimSpace(req.MobileNumber)
+
+	if req.Name == "" || req.MobileNumber == "" || req.Password == "" {
+		RespondError(w, http.StatusBadRequest, "name, mobile number, and password are required")
+		return
+	}
+
 	ctx := r.Context()
 	passHash, err := h.AuthService.HashPassword(req.Password)
 	if err != nil {
@@ -381,7 +382,7 @@ func (h *HandlerContext) CreateDeliveryPartner(w http.ResponseWriter, r *http.Re
 	query := `
 		INSERT INTO delivery_partners (name, mobile_number, password_hash, is_online)
 		VALUES ($1, $2, $3, false)
-		RETURNING id
+		RETURNING id::text
 	`
 	var partnerID string
 	err = h.DB.Pool.QueryRow(ctx, query, req.Name, req.MobileNumber, passHash).Scan(&partnerID)
@@ -397,28 +398,26 @@ func (h *HandlerContext) CreateDeliveryPartner(w http.ResponseWriter, r *http.Re
 
 func (h *HandlerContext) GetDeliveryPartners(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rows, err := h.DB.Pool.Query(ctx, `SELECT id, name, mobile_number, is_online, current_building, current_floor FROM delivery_partners`)
+	rows, err := h.DB.Pool.Query(ctx, `
+		SELECT id::text, name, mobile_number, COALESCE(is_online, false), COALESCE(current_building, ''), COALESCE(current_floor, 0)
+		FROM delivery_partners
+		ORDER BY name ASC
+	`)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to query delivery partners")
+		RespondError(w, http.StatusInternalServerError, "failed to query delivery partners: "+err.Error())
 		return
 	}
 	defer rows.Close()
 
-	var list []models.DeliveryPartner
+	list := []models.DeliveryPartner{}
 	for rows.Next() {
 		var dp models.DeliveryPartner
-		var b sql.NullString
-		var f sql.NullInt32
-		err = rows.Scan(&dp.ID, &dp.Name, &dp.MobileNumber, &dp.IsOnline, &b, &f)
-		if err == nil {
-			if b.Valid {
-				dp.CurrentBuilding = b.String
-			}
-			if f.Valid {
-				dp.CurrentFloor = int(f.Int32)
-			}
-			list = append(list, dp)
+		err = rows.Scan(&dp.ID, &dp.Name, &dp.MobileNumber, &dp.IsOnline, &dp.CurrentBuilding, &dp.CurrentFloor)
+		if err != nil {
+			log.Printf("Error scanning delivery partner row: %v", err)
+			continue
 		}
+		list = append(list, dp)
 	}
 	RespondJSON(w, http.StatusOK, list)
 }
@@ -581,28 +580,28 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 	defer rows.Close()
 
 	type OrderAdminItem struct {
-		ID                  string            `json:"id"`
-		OrderNumber         string            `json:"order_number"`
-		StudentID           string            `json:"student_id"`
-		StudentName         string            `json:"student_name"`
-		StudentPhone        string            `json:"student_phone"`
-		RoomNumber          string            `json:"room_number"`
-		Building            string            `json:"building"`
-		Floor               int               `json:"floor"`
-		TotalAmount         float64           `json:"total_amount"`
-		Status              string            `json:"status"`
-		CreatedAt           time.Time         `json:"created_at"`
-		PaymentStatus       string            `json:"payment_status"`
-		DeliveryPartnerName string            `json:"delivery_partner_name"`
-		DeliveryPartnerID   string            `json:"delivery_partner_id"`
-		NotAvailableFlag    bool              `json:"not_available_flag"`
-		ItemsSummary        string            `json:"items_summary"`
+		ID                  string             `json:"id"`
+		OrderNumber         string             `json:"order_number"`
+		StudentID           string             `json:"student_id"`
+		StudentName         string             `json:"student_name"`
+		StudentPhone        string             `json:"student_phone"`
+		RoomNumber          string             `json:"room_number"`
+		Building            string             `json:"building"`
+		Floor               int                `json:"floor"`
+		TotalAmount         float64            `json:"total_amount"`
+		Status              string             `json:"status"`
+		CreatedAt           time.Time          `json:"created_at"`
+		PaymentStatus       string             `json:"payment_status"`
+		DeliveryPartnerName string             `json:"delivery_partner_name"`
+		DeliveryPartnerID   string             `json:"delivery_partner_id"`
+		NotAvailableFlag    bool               `json:"not_available_flag"`
+		ItemsSummary        string             `json:"items_summary"`
 		Items               []models.OrderItem `json:"items,omitempty"`
-		PrintJobsSummary    string            `json:"print_jobs_summary"`
-		PrintJobs           []models.PrintJob `json:"print_jobs,omitempty"`
-		SlotName            string            `json:"slot_name"`
-		SlotDeliveryStart   string            `json:"slot_delivery_start"`
-		SlotDeliveryEnd     string            `json:"slot_delivery_end"`
+		PrintJobsSummary    string             `json:"print_jobs_summary"`
+		PrintJobs           []models.PrintJob  `json:"print_jobs,omitempty"`
+		SlotName            string             `json:"slot_name"`
+		SlotDeliveryStart   string             `json:"slot_delivery_start"`
+		SlotDeliveryEnd     string             `json:"slot_delivery_end"`
 	}
 
 	var list []OrderAdminItem
@@ -914,13 +913,26 @@ func parseCutoffTime(cutoffStr string) (int, int, error) {
 
 func (h *HandlerContext) GetCutoffTime(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	cutoff := "23:59"
+	cutoff := ""
+
+	// 1. Try Redis cache
 	if h.Redis != nil && h.Redis.Client != nil {
 		val, err := h.Redis.Client.Get(ctx, "order_cutoff_time").Result()
 		if err == nil && val != "" {
 			cutoff = val
 		}
 	}
+
+	// 2. Try PostgreSQL system_config table
+	if cutoff == "" {
+		_ = h.DB.Pool.QueryRow(ctx, `SELECT value FROM system_config WHERE key = 'order_cutoff_time'`).Scan(&cutoff)
+	}
+
+	// 3. Default fallback if empty
+	if cutoff == "" {
+		cutoff = "10:05 AM"
+	}
+
 	RespondJSON(w, http.StatusOK, map[string]string{"cutoff_time": cutoff})
 }
 
@@ -935,6 +947,12 @@ func (h *HandlerContext) SetCutoffTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.CutoffTime = strings.TrimSpace(req.CutoffTime)
+	if req.CutoffTime == "" {
+		RespondError(w, http.StatusBadRequest, "cutoff_time is required")
+		return
+	}
+
 	_, _, err := parseCutoffTime(req.CutoffTime)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "Invalid time format. Please use 'HH:MM AM/PM' (e.g., 10:05 AM) or 'HH:MM' (e.g., 10:05)")
@@ -942,18 +960,40 @@ func (h *HandlerContext) SetCutoffTime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if h.Redis != nil && h.Redis.Client != nil {
-		err = h.Redis.Client.Set(ctx, "order_cutoff_time", req.CutoffTime, 0).Err()
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "failed to save to Redis: "+err.Error())
-			return
-		}
+
+	// 1. Save to PostgreSQL database persistently
+	_, _ = h.DB.Pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS system_config (
+			key VARCHAR(50) PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	_, err = h.DB.Pool.Exec(ctx, `
+		INSERT INTO system_config (key, value, updated_at)
+		VALUES ('order_cutoff_time', $1, NOW())
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+	`, req.CutoffTime)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to save cutoff time to database: "+err.Error())
+		return
 	}
 
-	adminID := r.Context().Value("user_id").(string)
+	// 2. Update Redis cache if available
+	if h.Redis != nil && h.Redis.Client != nil {
+		_ = h.Redis.Client.Set(ctx, "order_cutoff_time", req.CutoffTime, 0).Err()
+	}
+
+	adminID, ok := r.Context().Value("user_id").(string)
+	if !ok {
+		adminID = "system"
+	}
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Set order cutoff time to "+req.CutoffTime, r)
 
-	RespondJSON(w, http.StatusOK, map[string]string{"message": "order cutoff time updated successfully"})
+	RespondJSON(w, http.StatusOK, map[string]string{
+		"message":     "order cutoff time updated successfully",
+		"cutoff_time": req.CutoffTime,
+	})
 }
 
 type AdminNotificationRequest struct {
@@ -970,7 +1010,7 @@ func (h *HandlerContext) AdminSendNotification(w http.ResponseWriter, r *http.Re
 	}
 
 	adminID := r.Context().Value("user_id").(string)
-	
+
 	var req AdminNotificationRequest
 	if err := jsonNewDecoder(r, &req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid payload")
@@ -1018,7 +1058,7 @@ func (h *HandlerContext) AdminSendNotification(w http.ResponseWriter, r *http.Re
 
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Sent push notification: %s", req.Title), r)
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Push notification dispatched",
+		"message":     "Push notification dispatched",
 		"targetCount": len(tokens),
 	})
 }
@@ -1097,7 +1137,6 @@ func (h *HandlerContext) ListMenuSchedules(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer rows.Close()
-
 
 	var schedules []models.MenuSchedule
 	for rows.Next() {
@@ -1296,6 +1335,3 @@ func (h *HandlerContext) DeleteMenuSchedule(w http.ResponseWriter, r *http.Reque
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Deleted menu schedule: %s", scheduleID), r)
 	RespondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
-
-
-

@@ -11,6 +11,7 @@ import {
   Plus,
   Check,
   X,
+  Menu,
   RefreshCw,
   Layers,
   ShieldAlert,
@@ -205,6 +206,7 @@ export default function AdminDashboard() {
   const [historySlotFilter, setHistorySlotFilter] = useState<string>("all");
   const [historyCourierFilter, setHistoryCourierFilter] = useState<string>("all");
   const [historyViewMode, setHistoryViewMode] = useState<"table" | "cards">("table");
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Loading indicators
   const [dataLoading, setDataLoading] = useState(false);
@@ -322,16 +324,32 @@ export default function AdminDashboard() {
         console.error("Failed to load tracking ad:", e);
       }
 
-      const studentData = await adminApi.getStudents();
-      setStudents(studentData || []);
+      try {
+        const studentData = await adminApi.getStudents();
+        setStudents(studentData || []);
+      } catch (e) {
+        console.error("Failed to load students:", e);
+      }
 
-      const partnerData = await adminApi.getPartners();
-      setPartners(partnerData || []);
+      try {
+        const partnerData = await adminApi.getPartners();
+        setPartners(partnerData || []);
+      } catch (e) {
+        console.error("Failed to load delivery partners:", e);
+      }
 
-      await fetchOrders();
+      try {
+        await fetchOrders();
+      } catch (e) {
+        console.error("Failed to load orders:", e);
+      }
 
-      const logData = await adminApi.getAuditLogs();
-      setAuditLogs(logData || []);
+      try {
+        const logData = await adminApi.getAuditLogs();
+        setAuditLogs(logData || []);
+      } catch (e) {
+        console.error("Failed to load audit logs:", e);
+      }
 
       // Fetch cutoff time config
       try {
@@ -1136,15 +1154,34 @@ export default function AdminDashboard() {
                 )}
               </button>
             </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Main Console Layout */}
+          </motion.div>      {/* Main Console Layout */}
       {isLoggedIn && profile && (
-        <div className="flex-1 flex flex-col md:flex-row min-h-screen">
-          {/* Sidebar Navigation */}
-          <aside className="w-full md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+        <div className="flex-1 flex flex-col md:flex-row min-h-screen max-w-full overflow-x-hidden">
+          {/* Mobile Navigation Header */}
+          <div className="md:hidden flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800 sticky top-0 z-30">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-sm">
+                A
+              </div>
+              <div>
+                <h1 className="font-extrabold text-sm leading-tight text-white">
+                  CampusBites Admin
+                </h1>
+                <span className="text-[9px] text-indigo-400 font-black uppercase tracking-widest">
+                  Control Desk
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+              className="p-2 bg-slate-800 text-slate-200 hover:text-white rounded-xl border border-slate-700"
+            >
+              {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+
+          {/* Desktop Sidebar Navigation */}
+          <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 flex-col shrink-0">
             <div className="p-6 border-b border-slate-800 flex items-center space-x-2">
               <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-sm">
                 A
@@ -1159,7 +1196,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <nav className="flex md:flex-col p-4 space-x-1.5 md:space-x-0 md:space-y-1.5 overflow-x-auto md:overflow-visible scrollbar-none">
+            <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto scrollbar-thin">
               {[
                 { id: "orders", label: "Dispatch Desk", icon: ShoppingBag },
                 { id: "history", label: "Order History", icon: FileText },
@@ -1187,7 +1224,7 @@ export default function AdminDashboard() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-auto md:w-full flex-shrink-0 flex items-center space-x-3 px-4 py-3 rounded-xl text-left font-bold text-xs transition ${
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left font-bold text-xs transition ${
                       activeTab === tab.id
                         ? "bg-indigo-600 text-white shadow"
                         : "text-slate-400 hover:text-white hover:bg-slate-850"
@@ -1212,21 +1249,88 @@ export default function AdminDashboard() {
             </div>
           </aside>
 
+          {/* Mobile Drawer Overlay */}
+          <AnimatePresence>
+            {isMobileNavOpen && (
+              <div className="fixed inset-0 z-50 md:hidden bg-slate-950/80 backdrop-blur-sm flex flex-col justify-end">
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-5 max-h-[85vh] flex flex-col"
+                >
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
+                    <span className="text-xs font-black uppercase text-indigo-400 tracking-wider">Admin Workspaces</span>
+                    <button onClick={() => setIsMobileNavOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <nav className="flex-1 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                    {[
+                      { id: "orders", label: "Dispatch Desk", icon: ShoppingBag },
+                      { id: "history", label: "Order History", icon: FileText },
+                      { id: "pickups", label: "Counter Pickups", icon: Clock },
+                      { id: "overview", label: "Overview Metrics", icon: TrendingUp },
+                      { id: "products", label: "Product Catalog", icon: Layers },
+                      { id: "menu-schedule", label: "Menu Schedule", icon: Calendar },
+                      { id: "slots", label: "Delivery Slots", icon: Clock },
+                      { id: "delivery-config", label: "Delivery Settings", icon: Sparkles },
+                      { id: "print-pricing", label: "Print Pricing", icon: Printer },
+                      { id: "tracking-ad", label: "Tracking Ad", icon: ImageIcon },
+                      { id: "students", label: "Verification Queue", icon: Users },
+                      { id: "partners", label: "Delivery Couriers", icon: Navigation },
+                      { id: "logs", label: "Audit Trail Logs", icon: ShieldAlert },
+                      { id: "notifications", label: "Push Notifications", icon: Bell },
+                    ].map((tab) => {
+                      const Icon = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            setActiveTab(tab.id as any);
+                            setIsMobileNavOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left font-bold text-xs transition ${
+                            activeTab === tab.id
+                              ? "bg-indigo-600 text-white shadow"
+                              : "text-slate-400 hover:text-white hover:bg-slate-850"
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </nav>
+                  <div className="pt-3 border-t border-slate-800 mt-2">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center space-x-2 px-4 py-2.5 bg-slate-950 border border-slate-850 hover:bg-red-950/20 hover:text-red-400 text-slate-400 rounded-xl font-bold text-xs"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Exit Session</span>
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
           {/* Main Content Workspace */}
-          <main className="flex-1 flex flex-col bg-slate-950 min-w-0">
+          <main className="flex-1 flex flex-col bg-slate-950 min-w-0 max-w-full overflow-x-hidden">
             {/* Top Workspace Header */}
-            <header className="h-16 border-b border-slate-800 px-8 flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <h2 className="font-extrabold text-sm text-white capitalize">
-                  {activeTab} Workspace
+            <header className="h-16 border-b border-slate-800 px-4 sm:px-8 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <h2 className="font-extrabold text-xs sm:text-sm text-white capitalize truncate">
+                  {activeTab.replace(/-/g, " ")} Workspace
                 </h2>
                 {dataLoading && (
-                  <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                  <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
                 )}
               </div>
 
               {/* Order Cutoff Time config widget */}
-              <div className="hidden lg:flex items-center space-x-2 bg-slate-900 border border-slate-850 px-3 py-1 rounded-xl">
+              <div className="hidden sm:flex items-center space-x-2 bg-slate-900 border border-slate-850 px-3 py-1 rounded-xl">
                 <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">
                   Order Cutoff:
                 </span>
@@ -1248,20 +1352,20 @@ export default function AdminDashboard() {
               <div className="flex items-center space-x-3 text-xs">
                 <button
                   onClick={fetchAllData}
-                  className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-slate-300"
+                  className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-slate-300 transition"
                   title="Reload metrics"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-slate-400 font-medium">Logged in:</span>
-                <span className="text-indigo-400 font-bold bg-indigo-950/30 border border-indigo-900/30 px-2 py-1 rounded">
+                <span className="text-slate-400 font-medium hidden sm:inline">Logged in:</span>
+                <span className="text-indigo-400 font-bold bg-indigo-950/30 border border-indigo-900/30 px-2 py-1 rounded truncate max-w-[120px] sm:max-w-none">
                   {profile.name}
                 </span>
               </div>
             </header>
 
             {/* Tab Workspace Panels */}
-            <div className="flex-1 p-8 overflow-y-auto">
+            <div className="flex-1 p-3 sm:p-6 lg:p-8 max-w-full overflow-x-hidden overflow-y-auto">
               {/* Tab 1: Overview Dashboard */}
               {activeTab === "overview" && (
                 <div className="space-y-8">
@@ -1492,11 +1596,10 @@ export default function AdminDashboard() {
                             <div className="flex items-center space-x-2">
                               <h4 className="font-extrabold text-base text-white">{schedule.name}</h4>
                               <span
-                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                  schedule.is_enabled
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${schedule.is_enabled
                                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                                     : "bg-slate-800 text-slate-400"
-                                }`}
+                                  }`}
                               >
                                 {schedule.is_enabled ? "Active" : "Disabled"}
                               </span>
@@ -1896,11 +1999,10 @@ export default function AdminDashboard() {
                               </span>
                             </div>
                             <span
-                              className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                                p.is_available
+                              className={`px-2 py-0.5 rounded text-[9px] font-bold ${p.is_available
                                   ? "bg-emerald-950 text-emerald-400"
                                   : "bg-red-950/60 text-red-400"
-                              }`}
+                                }`}
                             >
                               {p.is_available ? "In Stock" : "Sold Out"}
                             </span>
@@ -1927,11 +2029,10 @@ export default function AdminDashboard() {
                                   showToast(err.message, "error");
                                 }
                               }}
-                              className={`text-[9px] font-extrabold px-2 py-1 rounded transition ${
-                                p.is_available
+                              className={`text-[9px] font-extrabold px-2 py-1 rounded transition ${p.is_available
                                   ? "bg-red-950/65 text-red-400 hover:bg-red-950 border border-red-500/20"
                                   : "bg-emerald-950/65 text-emerald-400 hover:bg-emerald-950 border border-emerald-500/20"
-                              }`}
+                                }`}
                             >
                               {p.is_available
                                 ? "Mark Out of Stock"
@@ -2111,11 +2212,10 @@ export default function AdminDashboard() {
                               <button
                                 type="button"
                                 onClick={() => handleToggleSlot(slot)}
-                                className={`flex-1 text-[10px] font-bold py-2 rounded-xl border ${
-                                  slot.is_active
+                                className={`flex-1 text-[10px] font-bold py-2 rounded-xl border ${slot.is_active
                                     ? "bg-red-950/40 border-red-500/20 text-red-300"
                                     : "bg-emerald-950/40 border-emerald-500/20 text-emerald-300"
-                                }`}
+                                  }`}
                               >
                                 {slot.is_active ? "Disable" : "Activate"}
                               </button>
@@ -2128,7 +2228,7 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-               {activeTab === "delivery-config" && (
+              {activeTab === "delivery-config" && (
                 <div className="space-y-6 max-w-xl">
                   <div>
                     <h3 className="text-lg font-black text-white flex items-center gap-2">
@@ -2445,14 +2545,13 @@ export default function AdminDashboard() {
                                 <td className="p-4 text-center capitalize">
                                   {student.confidence_level ? (
                                     <span
-                                      className={`px-2 py-0.5 rounded text-[9px] font-black ${
-                                        student.confidence_level === "high"
+                                      className={`px-2 py-0.5 rounded text-[9px] font-black ${student.confidence_level === "high"
                                           ? "bg-emerald-950 text-emerald-400"
                                           : student.confidence_level ===
-                                              "medium"
+                                            "medium"
                                             ? "bg-amber-950 text-amber-400"
                                             : "bg-red-950 text-red-400"
-                                      }`}
+                                        }`}
                                     >
                                       {student.confidence_level}
                                     </span>
@@ -2462,14 +2561,13 @@ export default function AdminDashboard() {
                                 </td>
                                 <td className="p-4 text-center capitalize">
                                   <span
-                                    className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                                      student.verification_status === "verified"
+                                    className={`px-2 py-0.5 rounded text-[9px] font-bold ${student.verification_status === "verified"
                                         ? "bg-emerald-950 text-emerald-400"
                                         : student.verification_status ===
-                                            "rejected"
+                                          "rejected"
                                           ? "bg-red-950 text-red-400"
                                           : "bg-slate-950 text-slate-400"
-                                    }`}
+                                      }`}
                                   >
                                     {student.verification_status}
                                   </span>
@@ -2596,13 +2694,12 @@ export default function AdminDashboard() {
                           return (
                             <div
                               key={partner.id}
-                              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-2 ${
-                                partner.is_online
+                              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-2 ${partner.is_online
                                   ? workload > 3
                                     ? "bg-amber-950/40 border-amber-500/30 text-amber-300"
                                     : "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
                                   : "bg-slate-950 border-slate-800 text-slate-500"
-                              }`}
+                                }`}
                             >
                               <span className={`w-2 h-2 rounded-full ${partner.is_online ? "bg-emerald-400" : "bg-slate-600"}`} />
                               <span>{partner.name}</span>
@@ -2682,11 +2779,10 @@ export default function AdminDashboard() {
                         <button
                           key={tab.id}
                           onClick={() => setDispatchStatusFilter(tab.id)}
-                          className={`text-xs font-extrabold px-3 py-1 rounded-xl transition ${
-                            dispatchStatusFilter === tab.id
+                          className={`text-xs font-extrabold px-3 py-1 rounded-xl transition ${dispatchStatusFilter === tab.id
                               ? "bg-indigo-600 text-white"
                               : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
-                          }`}
+                            }`}
                         >
                           {tab.label}
                         </button>
@@ -2728,11 +2824,10 @@ export default function AdminDashboard() {
                               </span>
                             </div>
                             <span
-                              className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase ${
-                                order.payment_status === "paid"
+                              className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase ${order.payment_status === "paid"
                                   ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
                                   : "bg-red-950/60 text-red-400 border border-red-500/20"
-                              }`}
+                                }`}
                             >
                               {order.payment_status || "PAID"}
                             </span>
@@ -2788,15 +2883,14 @@ export default function AdminDashboard() {
                                 Dispatch Status
                               </span>
                               <span
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                  order.status === "delivered"
+                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${order.status === "delivered"
                                     ? "bg-emerald-950 text-emerald-400"
                                     : order.status === "out_of_stock"
                                       ? "bg-red-950 text-red-400"
                                       : order.status === "out_for_delivery"
                                         ? "bg-teal-950 text-teal-400"
                                         : "bg-slate-950 text-slate-400"
-                                }`}
+                                  }`}
                               >
                                 {order.status.replace(/_/g, " ")}
                               </span>
@@ -2832,9 +2926,9 @@ export default function AdminDashboard() {
 
                               {/* Assign Courier dropdown */}
                               {order.status === "received" ||
-                              order.status === "preparing" ||
-                              order.status === "packed" ||
-                              order.status === "assigned" ? (
+                                order.status === "preparing" ||
+                                order.status === "packed" ||
+                                order.status === "assigned" ? (
                                 <select
                                   onChange={(e) =>
                                     handleAssignPartner(
@@ -2903,22 +2997,20 @@ export default function AdminDashboard() {
                       <div className="bg-slate-900 border border-slate-800 rounded-xl p-1 flex items-center space-x-1">
                         <button
                           onClick={() => setHistoryViewMode("table")}
-                          className={`p-1.5 rounded-lg text-xs font-bold transition ${
-                            historyViewMode === "table"
+                          className={`p-1.5 rounded-lg text-xs font-bold transition ${historyViewMode === "table"
                               ? "bg-indigo-600 text-white"
                               : "text-slate-400 hover:text-white"
-                          }`}
+                            }`}
                           title="Table View"
                         >
                           <List className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setHistoryViewMode("cards")}
-                          className={`p-1.5 rounded-lg text-xs font-bold transition ${
-                            historyViewMode === "cards"
+                          className={`p-1.5 rounded-lg text-xs font-bold transition ${historyViewMode === "cards"
                               ? "bg-indigo-600 text-white"
                               : "text-slate-400 hover:text-white"
-                          }`}
+                            }`}
                           title="Grid Cards View"
                         >
                           <LayoutGrid className="w-4 h-4" />
@@ -3050,11 +3142,10 @@ export default function AdminDashboard() {
                         <button
                           key={tab.id}
                           onClick={() => setHistoryStatusFilter(tab.id)}
-                          className={`text-xs font-extrabold px-3 py-1 rounded-xl transition ${
-                            historyStatusFilter === tab.id
+                          className={`text-xs font-extrabold px-3 py-1 rounded-xl transition ${historyStatusFilter === tab.id
                               ? "bg-indigo-600 text-white"
                               : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
-                          }`}
+                            }`}
                         >
                           {tab.label}
                         </button>
@@ -3141,13 +3232,12 @@ export default function AdminDashboard() {
                                       ₹{order.total_amount.toFixed(0)}
                                     </div>
                                     <span
-                                      className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase mt-1 ${
-                                        order.status === "delivered"
+                                      className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase mt-1 ${order.status === "delivered"
                                           ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
                                           : order.status === "out_of_stock" || order.status === "cancelled"
                                             ? "bg-red-950 text-red-400 border border-red-500/20"
                                             : "bg-indigo-950 text-indigo-300 border border-indigo-500/20"
-                                      }`}
+                                        }`}
                                     >
                                       {order.status.replace(/_/g, " ")}
                                     </span>
@@ -3198,13 +3288,12 @@ export default function AdminDashboard() {
                               </span>
                             </div>
                             <span
-                              className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                                order.status === "delivered"
+                              className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${order.status === "delivered"
                                   ? "bg-emerald-950 text-emerald-400"
                                   : order.status === "out_of_stock" || order.status === "cancelled"
                                     ? "bg-red-950 text-red-400"
                                     : "bg-indigo-950 text-indigo-400"
-                              }`}
+                                }`}
                             >
                               {order.status.replace(/_/g, " ")}
                             </span>
@@ -3483,11 +3572,10 @@ export default function AdminDashboard() {
                                 </td>
                                 <td className="p-4 text-center">
                                   <span
-                                    className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                                      partner.is_online
+                                    className={`px-2 py-0.5 rounded text-[9px] font-bold ${partner.is_online
                                         ? "bg-emerald-950 text-emerald-400"
                                         : "bg-slate-950 text-slate-400"
-                                    }`}
+                                      }`}
                                   >
                                     {partner.is_online
                                       ? "Online (On Shift)"
@@ -3581,14 +3669,13 @@ export default function AdminDashboard() {
                           Verification Status
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block capitalize ${
-                            inspectedStudent.verification_status === "verified"
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block capitalize ${inspectedStudent.verification_status === "verified"
                               ? "bg-emerald-950 text-emerald-400"
                               : inspectedStudent.verification_status ===
-                                  "rejected"
+                                "rejected"
                                 ? "bg-red-950 text-red-400"
                                 : "bg-slate-950 text-slate-400"
-                          }`}
+                            }`}
                         >
                           {inspectedStudent.verification_status}
                         </span>
@@ -3599,21 +3686,19 @@ export default function AdminDashboard() {
                     <div className="flex border-b border-slate-800">
                       <button
                         onClick={() => setInspectedStudentTab("id_card")}
-                        className={`px-4 py-2 font-bold text-xs border-b-2 transition ${
-                          inspectedStudentTab === "id_card"
+                        className={`px-4 py-2 font-bold text-xs border-b-2 transition ${inspectedStudentTab === "id_card"
                             ? "border-indigo-500 text-indigo-400"
                             : "border-transparent text-slate-400 hover:text-white"
-                        }`}
+                          }`}
                       >
                         ID Card & OCR Verification
                       </button>
                       <button
                         onClick={() => setInspectedStudentTab("orders")}
-                        className={`px-4 py-2 font-bold text-xs border-b-2 transition ${
-                          inspectedStudentTab === "orders"
+                        className={`px-4 py-2 font-bold text-xs border-b-2 transition ${inspectedStudentTab === "orders"
                             ? "border-indigo-500 text-indigo-400"
                             : "border-transparent text-slate-400 hover:text-white"
-                        }`}
+                          }`}
                       >
                         Order History
                       </button>
@@ -3685,14 +3770,13 @@ export default function AdminDashboard() {
                                 Confidence Level:
                               </span>
                               <span
-                                className={`px-2 py-0.5 rounded text-[9px] font-black capitalize ${
-                                  inspectedStudent.confidence_level === "high"
+                                className={`px-2 py-0.5 rounded text-[9px] font-black capitalize ${inspectedStudent.confidence_level === "high"
                                     ? "bg-emerald-950 text-emerald-400"
                                     : inspectedStudent.confidence_level ===
-                                        "medium"
+                                      "medium"
                                       ? "bg-amber-950 text-amber-400"
                                       : "bg-red-950 text-red-400"
-                                }`}
+                                  }`}
                               >
                                 {inspectedStudent.confidence_level || "low"}
                               </span>
@@ -3742,13 +3826,12 @@ export default function AdminDashboard() {
                                       ).toLocaleDateString()}
                                     </span>
                                     <span
-                                      className={`capitalize font-bold ${
-                                        o.status === "delivered"
+                                      className={`capitalize font-bold ${o.status === "delivered"
                                           ? "text-emerald-400"
                                           : o.status === "cancelled"
                                             ? "text-red-400"
                                             : "text-amber-400"
-                                      }`}
+                                        }`}
                                     >
                                       {o.status.replace(/_/g, " ")}
                                     </span>
@@ -3807,11 +3890,10 @@ export default function AdminDashboard() {
                               Duty Shift Status:
                             </span>
                             <span
-                              className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                                inspectedPartner.is_online
+                              className={`px-2 py-0.5 rounded text-[9px] font-bold ${inspectedPartner.is_online
                                   ? "bg-emerald-950 text-emerald-400"
                                   : "bg-slate-950 text-slate-400"
-                              }`}
+                                }`}
                             >
                               {inspectedPartner.is_online
                                 ? "Online (On Shift)"
@@ -3870,11 +3952,10 @@ export default function AdminDashboard() {
                                       ).toLocaleDateString()}
                                     </span>
                                     <span
-                                      className={`px-1.5 py-0.2 rounded font-bold ${
-                                        o.status === "delivered"
+                                      className={`px-1.5 py-0.2 rounded font-bold ${o.status === "delivered"
                                           ? "text-emerald-400 bg-emerald-950/20"
                                           : "text-amber-400 bg-amber-950/20"
-                                      }`}
+                                        }`}
                                     >
                                       {o.status.replace(/_/g, " ")}
                                     </span>
@@ -4046,13 +4127,12 @@ export default function AdminDashboard() {
                             Order Dossier & Receipt
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                              inspectedOrder.status === "delivered"
+                            className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${inspectedOrder.status === "delivered"
                                 ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
                                 : inspectedOrder.status === "out_of_stock" || inspectedOrder.status === "cancelled"
                                   ? "bg-red-950 text-red-400 border border-red-500/20"
                                   : "bg-indigo-950 text-indigo-300 border border-indigo-500/20"
-                            }`}
+                              }`}
                           >
                             {inspectedOrder.status.replace(/_/g, " ")}
                           </span>
@@ -4103,13 +4183,12 @@ export default function AdminDashboard() {
                             <React.Fragment key={step.id}>
                               <div className="flex flex-col items-center space-y-1">
                                 <div
-                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
-                                    isDone
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${isDone
                                       ? "bg-emerald-600 text-white"
                                       : inspectedOrder.status === "cancelled" || inspectedOrder.status === "out_of_stock"
                                         ? "bg-red-950 text-red-400 border border-red-800"
                                         : "bg-slate-800 text-slate-500"
-                                  }`}
+                                    }`}
                                 >
                                   {isDone ? "✓" : idx + 1}
                                 </div>
@@ -4281,9 +4360,8 @@ export default function AdminDashboard() {
               {/* Toast Notification */}
               {toast && (
                 <div
-                  className={`fixed bottom-5 right-5 z-[100] px-5 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center space-x-2 text-white animate-pulse ${
-                    toast.type === "success" ? "bg-emerald-600" : "bg-red-650"
-                  }`}
+                  className={`fixed bottom-5 right-5 z-[100] px-5 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center space-x-2 text-white animate-pulse ${toast.type === "success" ? "bg-emerald-600" : "bg-red-650"
+                    }`}
                 >
                   <div className="w-2 h-2 rounded-full bg-white animate-ping" />
                   <span>{toast.message}</span>

@@ -375,45 +375,61 @@ export default function DeliveryPartnerApp() {
                               }}
                               className="bg-slate-900 border border-slate-850 hover:border-slate-800 p-4 rounded-xl flex items-center justify-between cursor-pointer active:scale-99 transition"
                             >
-                              <div className="min-w-0">
-                                <div className="flex items-center space-x-2">
+                              <div className="min-w-0 flex-1 pr-2 space-y-2">
+                                <div className="flex items-center justify-between">
                                   <span className="font-mono font-black text-sm text-white">
-                                    Room {order.room_number}
+                                    #{order.order_number || "ORDER"}
                                   </span>
                                   <span
                                     className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
                                       order.payment_status === "Paid"
-                                        ? "bg-emerald-950 text-emerald-400"
-                                        : "bg-amber-950 text-amber-400"
+                                        ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
+                                        : "bg-amber-950 text-amber-400 border border-amber-500/20"
                                     }`}
                                   >
-                                    {order.payment_status}
+                                    {order.payment_status || "Paid"}
                                   </span>
                                 </div>
-                                <span className="text-slate-400 text-xs mt-1 block">
-                                  Student: {order.student_name}
-                                </span>
-                                <span className="text-[10px] text-emerald-400 block">
-                                  {order.slot_name
-                                    ? `Slot: ${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
-                                    : "No slot assigned"}
-                                </span>
-                                <span className="text-[10px] text-slate-500 block truncate">
-                                  {(order.items || []).length > 0
-                                    ? (order.items || [])
-                                        .map(
-                                          (i) =>
-                                            `${i.product_name} x${i.quantity}`,
-                                        )
-                                        .join(", ")
-                                    : "No food items"}
-                                </span>
-                                {order.print_jobs && order.print_jobs.length > 0 && (
-                                  <span className="text-[10px] text-amber-400 block mt-0.5">
-                                    {order.print_jobs.length} print job
-                                    {order.print_jobs.length > 1 ? "s" : ""}
+
+                                <div className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 space-y-1 text-xs">
+                                  <div className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-wider flex items-center justify-between">
+                                    <span>Drop Off Location</span>
+                                    <span>Floor {order.floor}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                      <span className="text-[9px] text-slate-500 block">Hostel Block</span>
+                                      <span className="font-bold text-white leading-tight block">{order.building}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[9px] text-slate-500 block">Room Number</span>
+                                      <span className="font-extrabold text-amber-300 leading-tight block">Room {order.room_number}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="text-[11px] space-y-0.5">
+                                  <span className="text-slate-300 font-bold block">
+                                    Recipient: <strong className="text-white">{order.student_name}</strong>
                                   </span>
-                                )}
+                                  <span className="text-[10px] text-emerald-400 font-medium block">
+                                    {order.slot_name
+                                      ? `Slot: ${order.slot_name} (${order.slot_delivery_start}–${order.slot_delivery_end})`
+                                      : "Standard Delivery"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block truncate">
+                                    {(order.items || []).length > 0
+                                      ? (order.items || [])
+                                          .map((i) => `${i.product_name} x${i.quantity}`)
+                                          .join(", ")
+                                      : "No food items"}
+                                  </span>
+                                  {order.print_jobs && order.print_jobs.length > 0 && (
+                                    <span className="text-[10px] text-amber-400 font-semibold block mt-0.5">
+                                      📄 {order.print_jobs.length} print job{order.print_jobs.length > 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <ChevronRight className="w-4 h-4 text-slate-600" />
                             </div>
