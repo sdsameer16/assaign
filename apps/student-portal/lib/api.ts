@@ -45,6 +45,8 @@ export const logout = () => {
   localStorage.removeItem("student_profile");
 };
 
+let isHandling401 = false;
+
 // Generic fetch wrapper
 async function apiRequest<T>(
   endpoint: string,
@@ -62,12 +64,15 @@ async function apiRequest<T>(
     headers,
   });
 
-  if (response.status === 401 && token) {
-    logout();
-    if (typeof window !== "undefined") {
-      window.location.reload();
+  if (response.status === 401) {
+    if (token || isHandling401) {
+      logout();
+      if (!isHandling401 && typeof window !== "undefined") {
+        isHandling401 = true;
+        window.location.reload();
+      }
+      throw new Error("Session expired");
     }
-    throw new Error("Session expired");
   }
 
   if (!response.ok) {

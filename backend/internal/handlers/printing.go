@@ -123,7 +123,7 @@ func printJobsSummary(jobs []models.PrintJob) string {
 	}
 	parts := make([]string, 0, len(jobs))
 	for _, j := range jobs {
-		parts = append(parts, fmt.Sprintf("%s (%s %s, %dp ×%d)", j.FileName, j.ColorMode, j.Sides, j.PageCount, j.Copies))
+		parts = append(parts, fmt.Sprintf("%s (%s %s, %dp, %d copies)", j.FileName, strings.ToUpper(j.ColorMode), j.Sides, j.PageCount, j.Copies))
 	}
 	return fmt.Sprintf("%d print job(s): %s", len(jobs), strings.Join(parts, "; "))
 }

@@ -993,7 +993,30 @@ export default function AdminDashboard() {
           <div class="bold" style="margin-bottom: 6px; font-size: 11px;">FOOD ITEMS PREPARATION:</div>
           <div>${(order.items_summary || "No food items").split(', ').map((it: string) => `• <strong>${it}</strong>`).join('<br/>')}</div>
           
-          ${order.print_jobs_summary ? `
+          ${order.print_jobs && order.print_jobs.length > 0 ? `
+            <div class="divider"></div>
+            <div class="bold" style="margin-bottom: 6px; font-size: 11px; color: #b45309;">PRINT DOCUMENTS ATTACHED (${order.print_jobs.length}):</div>
+            <table class="item-table">
+              <thead>
+                <tr>
+                  <th>Document Name</th>
+                  <th style="text-align:center;">Copies</th>
+                  <th style="text-align:center;">Pages</th>
+                  <th style="text-align:right;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${order.print_jobs.map((pj: any) => `
+                  <tr>
+                    <td><strong>${pj.file_name}</strong><br/><small>${pj.color_mode.toUpperCase()} · ${pj.sides === 'double' ? 'Double Sided' : 'Single Sided'}</small></td>
+                    <td style="text-align:center; font-weight:bold;">${pj.copies}</td>
+                    <td style="text-align:center;">${pj.page_count}p</td>
+                    <td style="text-align:right; font-weight:bold;">₹${pj.line_total}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          ` : order.print_jobs_summary ? `
             <div class="divider"></div>
             <div class="bold" style="margin-bottom: 6px; font-size: 11px; color: #b45309;">PRINT DOCUMENTS ATTACHED:</div>
             <div>${order.print_jobs_summary}</div>
@@ -4342,8 +4365,8 @@ export default function AdminDashboard() {
                                 <div className="font-bold text-white flex items-center space-x-1.5">
                                   <span>📄 {pj.file_name}</span>
                                 </div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  {pj.page_count} pages • {pj.copies} copies • {pj.color_mode.toUpperCase()} • {pj.sides.toUpperCase()}
+                                <div className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                                  📋 <span className="text-amber-400 font-extrabold">{pj.copies} {pj.copies === 1 ? "Copy" : "Copies"}</span> • {pj.page_count} pages • {pj.color_mode.toUpperCase()} • {pj.sides === "double" ? "Double Sided" : "Single Sided"}
                                 </div>
                               </div>
                               <a

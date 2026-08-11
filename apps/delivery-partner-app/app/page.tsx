@@ -591,9 +591,8 @@ export default function DeliveryPartnerApp() {
                                   <p className="text-slate-200 font-semibold truncate">
                                     {job.file_name}
                                   </p>
-                                  <p className="text-[10px] text-slate-500">
-                                    {job.color_mode === "bw" ? "B&W" : "Color"} ·{" "}
-                                    {job.sides} · {job.page_count}p ×{job.copies}
+                                  <p className="text-[10px] text-amber-300 font-bold">
+                                    📋 <span className="text-white font-extrabold">{job.copies} {job.copies === 1 ? "Copy" : "Copies"}</span> · {job.page_count} Pages ({job.color_mode === "bw" ? "B&W" : "Color"} · {job.sides === "double" ? "Double Sided" : "Single Sided"})
                                   </p>
                                 </div>
                                 {job.file_url ? (

@@ -654,8 +654,10 @@ export default function StudentPortal() {
           });
           setCart(serverMap);
         }
-      } catch (e) {
-        console.error("Failed to load user cart:", e);
+      } catch (e: any) {
+        if (e?.message !== "Session expired") {
+          console.error("Failed to load user cart:", e);
+        }
         const cacheRaw =
           typeof window !== "undefined"
             ? localStorage.getItem("campusbites_cart_cache")
@@ -2943,7 +2945,7 @@ export default function StudentPortal() {
                       <div className="flex-1 min-w-0 text-xs">
                         <h5 className={`font-bold truncate ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{job.file_name}</h5>
                         <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
-                          {job.page_count} pages • {job.color_mode.toUpperCase()} • {job.copies} copies
+                          {job.copies} {job.copies === 1 ? "copy" : "copies"} • {job.page_count} pages • {job.color_mode.toUpperCase()} • {job.sides === "double" ? "Double Sided" : "Single Sided"}
                         </p>
                         <p className={`font-extrabold ${theme === "dark" ? "text-indigo-300" : "text-indigo-600"}`}>₹{job.line_total}</p>
                       </div>
@@ -3245,38 +3247,71 @@ export default function StudentPortal() {
                       </div>
                     ))}
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="grid grid-cols-3 gap-3 pt-2">
                       <div>
-                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Color Mode</label>
+                        <label className={`block font-bold mb-1 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Color Mode</label>
                         <select
                           value={printColorMode}
                           onChange={(e) => setPrintColorMode(e.target.value as PrintColorMode)}
-                          className={`w-full rounded-xl px-3 py-2 border transition ${
+                          className={`w-full rounded-xl px-2.5 py-2 text-xs border transition ${
                             theme === "dark"
                               ? "bg-slate-950 border-slate-800 text-slate-200"
                               : "bg-slate-50 border-slate-300 text-slate-900"
                           }`}
                         >
-                          <option value="bw">B&W (Black & White)</option>
+                          <option value="bw">B&W</option>
                           <option value="color">Color</option>
                         </select>
                       </div>
                       <div>
-                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Sides</label>
+                        <label className={`block font-bold mb-1 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Sides</label>
                         <select
                           value={printSides}
                           onChange={(e) => setPrintSides(e.target.value as PrintSides)}
-                          className={`w-full rounded-xl px-3 py-2 border transition ${
+                          className={`w-full rounded-xl px-2.5 py-2 text-xs border transition ${
                             theme === "dark"
                               ? "bg-slate-950 border-slate-800 text-slate-200"
                               : "bg-slate-50 border-slate-300 text-slate-900"
                           }`}
                         >
-                          <option value="single">Single Sided</option>
-                          <option value="double">Double Sided</option>
+                          <option value="single">Single</option>
+                          <option value="double">Double</option>
                         </select>
                       </div>
+                      <div>
+                        <label className={`block font-bold mb-1 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Copies</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={printCopies}
+                          onChange={(e) => setPrintCopies(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className={`w-full rounded-xl px-2.5 py-2 text-xs border font-bold transition ${
+                            theme === "dark"
+                              ? "bg-slate-950 border-slate-800 text-slate-200"
+                              : "bg-slate-50 border-slate-300 text-slate-900"
+                          }`}
+                        />
+                      </div>
                     </div>
+
+                    {printPricing && (
+                      <div className={`p-2.5 rounded-xl border text-[11px] font-medium space-y-1 transition-colors ${
+                        theme === "dark" ? "bg-slate-950/70 border-slate-800 text-slate-400" : "bg-slate-100 border-slate-200 text-slate-600"
+                      }`}>
+                        <div className="flex justify-between font-bold text-indigo-400">
+                          <span>Price Breakdown:</span>
+                          <span>
+                            ₹{rateForPrintOptions(printPricing, printColorMode, printSides)}/sheet × {getDraftBillableUnits()} sheets × {printCopies} {printCopies === 1 ? "copy" : "copies"}
+                          </span>
+                        </div>
+                        {printSides === "double" && (
+                          <div className="text-[10px] text-slate-400">
+                            * Double-sided uses ceil(pages/2) paper sheets: {getDraftBillableUnits()} sheets for {printDraftFiles.reduce((s, f) => s + f.page_count, 0)} pages.
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className={`pt-2 flex justify-between items-center border-t transition-colors ${
                       theme === "dark" ? "border-slate-800" : "border-slate-200"
