@@ -1881,8 +1881,34 @@ export default function StudentPortal() {
               </div>
             </div>
 
+            {/* Out of Stock Evening Refund Notice */}
+            {trackingDetails?.order?.status === "out_of_stock" && (
+              <div className="bg-red-950/60 border border-red-500/40 p-4 rounded-2xl space-y-1.5 text-center shadow-lg">
+                <span className="text-red-400 font-extrabold text-xs uppercase tracking-wider block flex items-center justify-center space-x-1.5">
+                  <span>⚠️ Order Out of Stock</span>
+                </span>
+                <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                  Your order contains an item that is currently out of stock. You will get a full refund by this evening.
+                </p>
+              </div>
+            )}
+
+            {/* Counter Pickup Notice for Not Available Flag */}
+            {trackingDetails?.not_available_flag && trackingDetails?.order?.status !== "delivered" && trackingDetails?.order?.status !== "cancelled" && (
+              <div className="bg-amber-950/60 border border-amber-500/50 p-4 rounded-2xl space-y-1.5 text-center shadow-lg">
+                <span className="text-amber-400 font-extrabold text-xs uppercase tracking-wider block flex items-center justify-center space-x-1.5">
+                  <span>🏬 Collect from Canteen Counter</span>
+                </span>
+                <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                  Our delivery partner could not reach you at your room (Not Available). Please visit the Canteen Counter to collect your order & show this Security Code:
+                </p>
+              </div>
+            )}
+
             {/* 1. Live Food Conveyor Belt Animation */}
-            <FoodConveyorBelt status={trackingDetails.order.status} theme={theme} />
+            {trackingDetails?.order?.status !== "out_of_stock" && !trackingDetails?.not_available_flag && (
+              <FoodConveyorBelt status={trackingDetails.order.status} theme={theme} />
+            )}
 
             {/* 2. Student Delivery Verification Code Box */}
             <StudentVerificationCodeCard
@@ -3402,6 +3428,21 @@ export default function StudentPortal() {
                           {ord.status.replace(/_/g, " ")}
                         </span>
                       </div>
+
+                      {/* Out of stock notice */}
+                      {ord.status === "out_of_stock" && (
+                        <div className="bg-red-950/40 border border-red-500/30 p-2.5 rounded-xl text-xs text-red-300 font-medium">
+                          ⚠️ Order Out of Stock. Full refund will be processed by this evening.
+                        </div>
+                      )}
+
+                      {/* Not available counter pickup notice */}
+                      {ord.not_available_flag && ord.status !== "delivered" && ord.status !== "cancelled" && (
+                        <div className="bg-amber-950/40 border border-amber-500/30 p-2.5 rounded-xl text-xs text-amber-300 font-medium space-y-1">
+                          <div className="font-bold text-amber-400">🏬 Canteen Counter Pickup Required</div>
+                          <div>Collect from Canteen Counter & show Security Code: <span className="font-mono font-black text-white">{getVerificationCode(ord.order_number)}</span></div>
+                        </div>
+                      )}
 
                       {/* Active Live Conveyor Belt & Verification Action */}
                       {ord.status !== "delivered" && ord.status !== "cancelled" && ord.status !== "out_of_stock" && ord.payment_status === "paid" && (

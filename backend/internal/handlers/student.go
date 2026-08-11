@@ -885,9 +885,10 @@ func (h *HandlerContext) StudentGetHistory(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 
 	query := `
-		SELECT o.id, o.order_number, o.room_number, o.building, o.floor, o.total_amount, o.status, o.created_at, p.status
+		SELECT o.id, o.order_number, o.room_number, o.building, o.floor, o.total_amount, o.status, o.created_at, p.status, COALESCE(da.not_available_flag, false)
 		FROM orders o
 		JOIN payments p ON o.id = p.order_id
+		LEFT JOIN delivery_assignments da ON o.id = da.order_id
 		WHERE o.student_id = $1 AND p.status = 'paid'
 		ORDER BY o.created_at DESC
 	`
@@ -899,15 +900,16 @@ func (h *HandlerContext) StudentGetHistory(w http.ResponseWriter, r *http.Reques
 	defer rows.Close()
 
 	type OrderNode struct {
-		ID            string    `json:"id"`
-		OrderNumber   string    `json:"order_number"`
-		RoomNumber    string    `json:"room_number"`
-		Building      string    `json:"building"`
-		Floor         int       `json:"floor"`
-		TotalAmount   float64   `json:"total_amount"`
-		Status        string    `json:"status"`
-		CreatedAt     time.Time `json:"created_at"`
-		PaymentStatus string    `json:"payment_status"`
+		ID               string    `json:"id"`
+		OrderNumber      string    `json:"order_number"`
+		RoomNumber       string    `json:"room_number"`
+		Building         string    `json:"building"`
+		Floor            int       `json:"floor"`
+		TotalAmount      float64   `json:"total_amount"`
+		Status           string    `json:"status"`
+		CreatedAt        time.Time `json:"created_at"`
+		PaymentStatus    string    `json:"payment_status"`
+		NotAvailableFlag bool      `json:"not_available_flag"`
 	}
 
 	var list []OrderNode
@@ -923,6 +925,7 @@ func (h *HandlerContext) StudentGetHistory(w http.ResponseWriter, r *http.Reques
 			&o.Status,
 			&o.CreatedAt,
 			&o.PaymentStatus,
+			&o.NotAvailableFlag,
 		)
 		if err == nil {
 			list = append(list, o)

@@ -52,6 +52,15 @@ import { MenuSchedule } from "@campusbites/types";
 import { uploadAdImage } from "../lib/cloudinary";
 
 
+const getVerificationCode = (orderNumber: string) => {
+  if (!orderNumber) return "CB-58926";
+  const parts = orderNumber.split("-");
+  if (parts.length >= 2 && parts[1]) {
+    return `CB-${parts[1]}`;
+  }
+  return orderNumber.startsWith("CB-") ? orderNumber : `CB-${orderNumber}`;
+};
+
 export default function AdminDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [token, setToken] = useState<string | null>(null);
@@ -1049,6 +1058,10 @@ export default function AdminDashboard() {
       s.roll_number.toLowerCase().includes(studentSearch.toLowerCase()),
   );
 
+  const pickupOrders = orders.filter(
+    (o) => (o.not_available_flag || o.status === "customer_not_available") && o.status !== "delivered" && o.status !== "cancelled"
+  );
+
   // Dispatch Desk Filtered Orders
   const filteredDispatchOrders = orders.filter((o) => {
     // Basic Search Filter
@@ -1061,7 +1074,11 @@ export default function AdminDashboard() {
 
     // Status Filter
     const matchesStatus =
-      dispatchStatusFilter === "all" || o.status === dispatchStatusFilter;
+      dispatchStatusFilter === "all"
+        ? true
+        : dispatchStatusFilter === "pickups"
+        ? (Boolean(o.not_available_flag) || o.status === "customer_not_available") && o.status !== "delivered" && o.status !== "cancelled"
+        : o.status === dispatchStatusFilter;
 
     // Building Filter
     const matchesBuilding =
@@ -2724,7 +2741,10 @@ export default function AdminDashboard() {
                       </span>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+                    <div
+                      onClick={() => setDispatchStatusFilter(dispatchStatusFilter === "pickups" ? "all" : "pickups")}
+                      className={`bg-slate-900 border rounded-2xl p-4 shadow cursor-pointer transition ${dispatchStatusFilter === "pickups" ? "border-rose-500 ring-2 ring-rose-500/50" : "border-slate-800 hover:border-slate-700"}`}
+                    >
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                         Counter Pickups Waiting
                       </span>
@@ -2826,6 +2846,7 @@ export default function AdminDashboard() {
                       </span>
                       {[
                         { id: "all", label: "All Orders" },
+                        { id: "pickups", label: "🏬 Counter Pickups" },
                         { id: "received", label: "Received" },
                         { id: "preparing", label: "Preparing" },
                         { id: "packed", label: "Packed" },
@@ -2890,6 +2911,21 @@ export default function AdminDashboard() {
                               {order.payment_status || "PAID"}
                             </span>
                           </div>
+
+                          {/* Counter Pickup Badge with PIN */}
+                          {(order.not_available_flag || order.status === "customer_not_available") && (
+                            <div className="bg-amber-950/80 border border-amber-500/50 p-2.5 rounded-xl space-y-1 text-xs">
+                              <div className="font-extrabold text-amber-400 flex items-center justify-between">
+                                <span>🏬 Counter Pickup (Not Available)</span>
+                                <span className="font-mono bg-slate-950 px-2 py-0.5 rounded text-white border border-amber-500/30 font-black">
+                                  PIN: {getVerificationCode(order.order_number)}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-300">
+                                Courier flagged student as Not Available. Order is waiting at Canteen Counter.
+                              </p>
+                            </div>
+                          )}
 
                           {/* Items summary */}
                           <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-850">
