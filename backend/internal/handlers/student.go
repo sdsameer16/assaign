@@ -888,7 +888,7 @@ func (h *HandlerContext) StudentGetHistory(w http.ResponseWriter, r *http.Reques
 		SELECT o.id, o.order_number, o.room_number, o.building, o.floor, o.total_amount, o.status, o.created_at, p.status
 		FROM orders o
 		JOIN payments p ON o.id = p.order_id
-		WHERE o.student_id = $1
+		WHERE o.student_id = $1 AND p.status = 'paid'
 		ORDER BY o.created_at DESC
 	`
 	rows, err := h.DB.Pool.Query(ctx, query, studentID)

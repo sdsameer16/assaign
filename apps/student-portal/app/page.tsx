@@ -351,8 +351,9 @@ export default function StudentPortal() {
   const handleOpenActiveOrders = async () => {
     try {
       const history = await studentApi.getHistory();
-      setOrderHistory(history);
-      const activeOrd = history.find(
+      const paidHistory = (history || []).filter((o: any) => o.payment_status === "paid");
+      setOrderHistory(paidHistory);
+      const activeOrd = paidHistory.find(
         (o: any) => o.status !== "delivered" && o.status !== "cancelled" && o.status !== "out_of_stock"
       );
       if (activeOrd) {
@@ -414,6 +415,7 @@ export default function StudentPortal() {
       activeOrderIDs.length > 0 &&
       selectedTrackingID !== null &&
       trackingDetails !== null &&
+      trackingDetails?.payment_status === "paid" &&
       !dismissedBannerIDs.includes(selectedTrackingID) &&
       trackingDetails?.order?.status !== "delivered" &&
       trackingDetails?.order?.status !== "cancelled" &&
@@ -689,7 +691,8 @@ export default function StudentPortal() {
   const fetchOrderHistory = async () => {
     try {
       const history = await studentApi.getHistory();
-      setOrderHistory(history || []);
+      const paidHistory = (history || []).filter((o: any) => o.payment_status === "paid");
+      setOrderHistory(paidHistory);
     } catch (e) {
       console.error("Failed to load order history:", e);
     }
@@ -1556,20 +1559,6 @@ export default function StudentPortal() {
         print_jobs: printJobsPayload,
       });
 
-      // Reset & empty cart immediately upon successful order placement
-      setCart({});
-      setPrintJobs([]);
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("campusbites_cart_cache");
-        localStorage.removeItem("campusbites_guest_cart");
-      }
-      syncCartState({}, isLoggedIn);
-
-      setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
-      setSelectedTrackingID(orderData.order_id);
-      setIsCartOpen(false);
-      fetchOrderHistory();
-
       if ((window as any).Razorpay && process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
         const options = {
           key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
@@ -1586,6 +1575,19 @@ export default function StudentPortal() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
               });
+
+              // Empty cart ONLY after payment verification succeeds
+              setCart({});
+              setPrintJobs([]);
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("campusbites_cart_cache");
+                localStorage.removeItem("campusbites_guest_cart");
+              }
+              syncCartState({}, isLoggedIn);
+
+              setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
+              setSelectedTrackingID(orderData.order_id);
+              setIsCartOpen(false);
               fetchOrderHistory();
             } catch (e: any) {
               alert("Payment verification failed: " + e.message);
@@ -1601,7 +1603,20 @@ export default function StudentPortal() {
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } else {
-        alert("Order created successfully! Multi-order tracker live.");
+        // Fallback for environment without Razorpay Key ID
+        setCart({});
+        setPrintJobs([]);
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("campusbites_cart_cache");
+          localStorage.removeItem("campusbites_guest_cart");
+        }
+        syncCartState({}, isLoggedIn);
+
+        setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
+        setSelectedTrackingID(orderData.order_id);
+        setIsCartOpen(false);
+        fetchOrderHistory();
+        alert("Order created successfully!");
       }
     } catch (err: any) {
       alert("Failed to place order: " + err.message);
@@ -3354,7 +3369,7 @@ export default function StudentPortal() {
                       </div>
 
                       {/* Active Live Conveyor Belt & Verification Action */}
-                      {ord.status !== "delivered" && ord.status !== "cancelled" && ord.status !== "out_of_stock" && (
+                      {ord.status !== "delivered" && ord.status !== "cancelled" && ord.status !== "out_of_stock" && ord.payment_status === "paid" && (
                         <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/30 p-2.5 rounded-xl">
                           <div className="flex items-center space-x-2 text-xs">
                             <span className="relative flex h-2.5 w-2.5">

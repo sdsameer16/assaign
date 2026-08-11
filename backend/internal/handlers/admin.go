@@ -566,10 +566,11 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		       COALESCE(TO_CHAR(ds.delivery_end, 'HH24:MI'), '')
 		FROM orders o
 		LEFT JOIN students s ON o.student_id = s.id
-		LEFT JOIN payments p ON o.id = p.order_id
+		JOIN payments p ON o.id = p.order_id
 		LEFT JOIN delivery_assignments da ON o.id = da.order_id
 		LEFT JOIN delivery_partners dp ON da.delivery_partner_id = dp.id
 		LEFT JOIN delivery_slots ds ON o.delivery_slot_id = ds.id
+		WHERE p.status = 'paid'
 		ORDER BY o.created_at DESC
 	`
 	rows, err := h.DB.Pool.Query(ctx, query)

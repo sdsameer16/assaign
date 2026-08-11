@@ -270,7 +270,8 @@ export default function AdminDashboard() {
   const fetchOrders = async () => {
     try {
       const data = await adminApi.getOrders();
-      setOrders(data || []);
+      const paidOrders = (data || []).filter((o: any) => o.payment_status === "paid");
+      setOrders(paidOrders);
     } catch (e) {
       console.error(e);
     }
