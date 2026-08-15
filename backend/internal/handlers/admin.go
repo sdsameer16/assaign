@@ -570,7 +570,7 @@ func (h *HandlerContext) AdminGetOrders(w http.ResponseWriter, r *http.Request) 
 		LEFT JOIN delivery_assignments da ON o.id = da.order_id
 		LEFT JOIN delivery_partners dp ON da.delivery_partner_id = dp.id
 		LEFT JOIN delivery_slots ds ON o.delivery_slot_id = ds.id
-		WHERE p.status = 'paid'
+		WHERE p.status IN ('paid', 'reconciliation_required')
 		ORDER BY o.created_at DESC
 	`
 	rows, err := h.DB.Pool.Query(ctx, query)
@@ -1348,4 +1348,122 @@ func (h *HandlerContext) DeleteMenuSchedule(w http.ResponseWriter, r *http.Reque
 
 	_ = h.AuditService.LogAction(ctx, adminID, "admin", fmt.Sprintf("Deleted menu schedule: %s", scheduleID), r)
 	RespondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// AdminGetPaymentHealth retrieves detailed payment transaction logs for admin monitoring.
+func (h *HandlerContext) AdminGetPaymentHealth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	query := `
+		SELECT p.id, p.order_id, o.order_number, COALESCE(s.short_name, 'Student'), COALESCE(s.mobile_number, ''),
+		       p.razorpay_order_id, COALESCE(p.razorpay_payment_id, ''), p.amount, p.status::text,
+		       p.reconciled_at, COALESCE(p.reconciliation_notes, ''), p.reconciliation_attempt_count,
+		       COALESCE(p.last_reconciliation_error, ''), p.last_reconciliation_at,
+		       COALESCE(p.reconciliation_source, ''), COALESCE(p.razorpay_status, ''), p.created_at
+		FROM payments p
+		JOIN orders o ON p.order_id = o.id
+		LEFT JOIN students s ON o.student_id = s.id
+		ORDER BY p.created_at DESC
+		LIMIT 200
+	`
+	rows, err := h.DB.Pool.Query(ctx, query)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to query payment health: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type PaymentHealthRecord struct {
+		ID                         string     `json:"id"`
+		OrderID                    string     `json:"order_id"`
+		OrderNumber                string     `json:"order_number"`
+		StudentName                string     `json:"student_name"`
+		StudentPhone               string     `json:"student_phone"`
+		RazorpayOrderID            string     `json:"razorpay_order_id"`
+		RazorpayPaymentID          string     `json:"razorpay_payment_id"`
+		Amount                     float64    `json:"amount"`
+		Status                     string     `json:"status"`
+		ReconciledAt               *time.Time `json:"reconciled_at"`
+		ReconciliationNotes        string     `json:"reconciliation_notes"`
+		ReconciliationAttemptCount int        `json:"reconciliation_attempt_count"`
+		LastReconciliationError    string     `json:"last_reconciliation_error"`
+		LastReconciliationAt       *time.Time `json:"last_reconciliation_at"`
+		ReconciliationSource       string     `json:"reconciliation_source"`
+		RazorpayStatus             string     `json:"razorpay_status"`
+		CreatedAt                  time.Time  `json:"created_at"`
+	}
+
+	var list []PaymentHealthRecord
+	for rows.Next() {
+		var rec PaymentHealthRecord
+		err = rows.Scan(
+			&rec.ID, &rec.OrderID, &rec.OrderNumber, &rec.StudentName, &rec.StudentPhone,
+			&rec.RazorpayOrderID, &rec.RazorpayPaymentID, &rec.Amount, &rec.Status,
+			&rec.ReconciledAt, &rec.ReconciliationNotes, &rec.ReconciliationAttemptCount,
+			&rec.LastReconciliationError, &rec.LastReconciliationAt,
+			&rec.ReconciliationSource, &rec.RazorpayStatus, &rec.CreatedAt,
+		)
+		if err == nil {
+			list = append(list, rec)
+		}
+	}
+	RespondJSON(w, http.StatusOK, list)
+}
+
+// AdminReconcilePayment allows admins to trigger a 1-click manual reconciliation for any order.
+func (h *HandlerContext) AdminReconcilePayment(w http.ResponseWriter, r *http.Request) {
+	adminID := r.Context().Value("user_id").(string)
+	paymentID := chi.URLParam(r, "id")
+	ctx := r.Context()
+
+	var rzpOrderID, rzpPaymentID string
+	var amount float64
+	err := h.DB.Pool.QueryRow(ctx, "SELECT razorpay_order_id, COALESCE(razorpay_payment_id, ''), amount FROM payments WHERE id = $1 OR order_id = $1", paymentID).Scan(&rzpOrderID, &rzpPaymentID, &amount)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "payment record not found")
+		return
+	}
+
+	if rzpOrderID == "" {
+		RespondError(w, http.StatusBadRequest, "razorpay_order_id is missing for this record")
+		return
+	}
+
+	// Fetch payments from Razorpay API
+	paymentsList, err := h.PaymentService.FetchRazorpayOrderPayments(rzpOrderID)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "failed to query Razorpay REST API: "+err.Error())
+		return
+	}
+
+	var capturedID string
+	var capturedAmount int64
+	var currency string = "INR"
+	for _, p := range paymentsList {
+		if strings.ToLower(p.Status) == "captured" || strings.ToLower(p.Status) == "paid" || p.Captured {
+			capturedID = p.ID
+			capturedAmount = p.Amount
+			currency = p.Currency
+			break
+		}
+	}
+
+	if capturedID == "" {
+		RespondError(w, http.StatusConflict, fmt.Sprintf("Razorpay reports no captured payment for order %s (%d attempts found)", rzpOrderID, len(paymentsList)))
+		return
+	}
+
+	// Confirm payment and recover order
+	err = h.ConfirmPaymentAndOrder(ctx, rzpOrderID, capturedID, "", "admin_manual", capturedAmount, currency, "")
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "manual reconciliation failed: "+err.Error())
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Manually reconciled payment "+paymentID+" (Razorpay Order "+rzpOrderID+")", r)
+
+	RespondJSON(w, http.StatusOK, map[string]string{
+		"message":             "Payment successfully reconciled and order confirmed!",
+		"razorpay_order_id":   rzpOrderID,
+		"razorpay_payment_id": capturedID,
+	})
 }

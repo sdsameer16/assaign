@@ -319,6 +319,35 @@ export const adminApi = {
 
   // Audit Trails
   getAuditLogs: () => apiRequest<AuditLog[]>("/audit-logs"),
+
+  // Payment Health & Reconciliation
+  getPaymentHealth: () => apiRequest<PaymentHealthRecord[]>("/payments/health"),
+
+  reconcilePayment: (id: string) =>
+    apiRequest<{ message: string; razorpay_order_id: string; razorpay_payment_id: string }>(
+      `/payments/${id}/reconcile`,
+      { method: "POST" },
+    ),
 };
+
+export interface PaymentHealthRecord {
+  id: string;
+  order_id: string;
+  order_number: string;
+  student_name: string;
+  student_phone: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  amount: number;
+  status: string;
+  reconciled_at?: string;
+  reconciliation_notes?: string;
+  reconciliation_attempt_count: number;
+  last_reconciliation_error?: string;
+  last_reconciliation_at?: string;
+  reconciliation_source?: string;
+  razorpay_status?: string;
+  created_at: string;
+}
 
 

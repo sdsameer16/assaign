@@ -96,6 +96,10 @@ func main() {
 
 		// Seed initial datasets if empty
 		seedDatabase(db, authService)
+
+		// Start automated background payment reconciler worker
+		reconciler := services.NewPaymentReconciler(db, paymentService, hCtx.ConfirmPaymentAndOrder)
+		go reconciler.Start(context.Background(), 60*time.Second)
 	}
 
 	// 5. Initialize Router
@@ -165,6 +169,37 @@ func runMigrations(db *database.DB) {
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		)`,
 		"CREATE INDEX IF NOT EXISTS idx_print_jobs_order ON print_jobs(order_id)",
+		"ALTER TYPE payment_status ADD VALUE IF NOT EXISTS 'reconciliation_required'",
+		"ALTER TYPE payment_status ADD VALUE IF NOT EXISTS 'payment_pending'",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMP WITH TIME ZONE",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS reconciliation_notes TEXT",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS reconciliation_attempt_count INT DEFAULT 0",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS last_reconciliation_error TEXT",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS last_reconciliation_at TIMESTAMP WITH TIME ZONE",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS reconciliation_source VARCHAR(50)",
+		"ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_status VARCHAR(50)",
+		`DO $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'payments') THEN
+				WITH duplicates AS (
+					SELECT id, razorpay_order_id,
+					       ROW_NUMBER() OVER (PARTITION BY razorpay_order_id ORDER BY created_at DESC) as rn
+					FROM payments
+					WHERE razorpay_order_id IS NOT NULL AND razorpay_order_id != ''
+				)
+				UPDATE payments SET razorpay_order_id = razorpay_order_id || '_dup_' || id::text WHERE id IN (SELECT id FROM duplicates WHERE rn > 1);
+
+				WITH duplicates_pay AS (
+					SELECT id, razorpay_payment_id,
+					       ROW_NUMBER() OVER (PARTITION BY razorpay_payment_id ORDER BY created_at DESC) as rn
+					FROM payments
+					WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id != ''
+				)
+				UPDATE payments SET razorpay_payment_id = razorpay_payment_id || '_dup_' || id::text WHERE id IN (SELECT id FROM duplicates_pay WHERE rn > 1);
+			END IF;
+		END $$;`,
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_rzp_order_unique ON payments(razorpay_order_id)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_rzp_payment_unique ON payments(razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id != ''",
 		`CREATE TABLE IF NOT EXISTS tracking_ad (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			is_enabled BOOLEAN NOT NULL DEFAULT FALSE,

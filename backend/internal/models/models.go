@@ -32,10 +32,12 @@ const (
 
 // Payment status types
 const (
-	PaymentStatusCreated  = "created"
-	PaymentStatusPaid     = "paid"
-	PaymentStatusFailed   = "failed"
-	PaymentStatusRefunded = "refunded"
+	PaymentStatusCreated                = "created"
+	PaymentStatusPending                = "payment_pending"
+	PaymentStatusPaid                   = "paid"
+	PaymentStatusFailed                 = "failed"
+	PaymentStatusRefunded               = "refunded"
+	PaymentStatusReconciliationRequired = "reconciliation_required"
 )
 
 // Admin role types
@@ -161,15 +163,22 @@ type TrackingAd struct {
 
 // Payment model mapping to payments table
 type Payment struct {
-	ID                string    `json:"id"`
-	OrderID           string    `json:"order_id"`
-	RazorpayOrderID   string    `json:"razorpay_order_id,omitempty"`   // Hide if empty/admin context
-	RazorpayPaymentID string    `json:"razorpay_payment_id,omitempty"` // Hide if empty/admin context
-	RazorpaySignature string    `json:"razorpay_signature,omitempty"`  // Hide if empty/admin context
-	Amount            float64   `json:"amount"`
-	Status            string    `json:"status"`
-	WebhookLog        string    `json:"webhook_log,omitempty"` // Raw JSON string
-	CreatedAt         time.Time `json:"created_at"`
+	ID                         string     `json:"id"`
+	OrderID                    string     `json:"order_id"`
+	RazorpayOrderID            string     `json:"razorpay_order_id,omitempty"`   // Hide if empty/admin context
+	RazorpayPaymentID          string     `json:"razorpay_payment_id,omitempty"` // Hide if empty/admin context
+	RazorpaySignature          string     `json:"razorpay_signature,omitempty"`  // Hide if empty/admin context
+	Amount                     float64    `json:"amount"`
+	Status                     string     `json:"status"`
+	WebhookLog                 string     `json:"webhook_log,omitempty"` // Raw JSON string
+	ReconciledAt               *time.Time `json:"reconciled_at,omitempty"`
+	ReconciliationNotes        string     `json:"reconciliation_notes,omitempty"`
+	ReconciliationAttemptCount int        `json:"reconciliation_attempt_count"`
+	LastReconciliationError    string     `json:"last_reconciliation_error,omitempty"`
+	LastReconciliationAt       *time.Time `json:"last_reconciliation_at,omitempty"`
+	ReconciliationSource       string     `json:"reconciliation_source,omitempty"`
+	RazorpayStatus             string     `json:"razorpay_status,omitempty"`
+	CreatedAt                  time.Time  `json:"created_at"`
 }
 
 // DeliveryPartner model mapping to delivery_partners table

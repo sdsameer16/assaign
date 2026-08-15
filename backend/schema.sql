@@ -4,7 +4,9 @@
 DO $$ BEGIN CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE confidence_level AS ENUM ('high', 'medium', 'low'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE order_status AS ENUM ('received', 'preparing', 'packed', 'assigned', 'out_for_delivery', 'delivered', 'cancelled', 'out_of_stock'); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('created', 'paid', 'failed', 'refunded'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('created', 'payment_pending', 'paid', 'failed', 'refunded', 'reconciliation_required'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+ALTER TYPE payment_status ADD VALUE IF NOT EXISTS 'reconciliation_required';
+ALTER TYPE payment_status ADD VALUE IF NOT EXISTS 'payment_pending';
 DO $$ BEGIN CREATE TYPE admin_role AS ENUM ('super_admin', 'staff'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 
@@ -140,10 +142,48 @@ CREATE TABLE IF NOT EXISTS payments (
     amount DECIMAL(10,2) NOT NULL,
     status payment_status DEFAULT 'created',
     webhook_log JSONB,
+    reconciled_at TIMESTAMP WITH TIME ZONE,
+    reconciliation_notes TEXT,
+    reconciliation_attempt_count INT DEFAULT 0,
+    last_reconciliation_error TEXT,
+    last_reconciliation_at TIMESTAMP WITH TIME ZONE,
+    reconciliation_source VARCHAR(50),
+    razorpay_status VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+
+-- Migration Safety Check & Unique Indexes on Razorpay correlation IDs
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'payments') THEN
+        -- Deduplicate razorpay_order_id if duplicates exist in legacy data
+        WITH duplicates AS (
+            SELECT id, razorpay_order_id,
+                   ROW_NUMBER() OVER (PARTITION BY razorpay_order_id ORDER BY created_at DESC) as rn
+            FROM payments
+            WHERE razorpay_order_id IS NOT NULL AND razorpay_order_id != ''
+        )
+        UPDATE payments
+        SET razorpay_order_id = razorpay_order_id || '_dup_' || id::text
+        WHERE id IN (SELECT id FROM duplicates WHERE rn > 1);
+
+        -- Deduplicate razorpay_payment_id if duplicates exist in legacy data
+        WITH duplicates_pay AS (
+            SELECT id, razorpay_payment_id,
+                   ROW_NUMBER() OVER (PARTITION BY razorpay_payment_id ORDER BY created_at DESC) as rn
+            FROM payments
+            WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id != ''
+        )
+        UPDATE payments
+        SET razorpay_payment_id = razorpay_payment_id || '_dup_' || id::text
+        WHERE id IN (SELECT id FROM duplicates_pay WHERE rn > 1);
+    END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_rzp_order_unique ON payments(razorpay_order_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_rzp_payment_unique ON payments(razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL AND razorpay_payment_id != '';
 
 -- 9. Delivery Partners Table
 CREATE TABLE IF NOT EXISTS delivery_partners (

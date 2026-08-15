@@ -392,23 +392,7 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Cancel stale unpaid orders for this student (older than 30 minutes)
-	_, _ = h.DB.Pool.Exec(ctx, `
-		WITH stale AS (
-			SELECT o.id
-			FROM orders o
-			JOIN payments p ON p.order_id = o.id
-			WHERE o.student_id = $1
-			  AND o.status = $2
-			  AND p.status = $3
-			  AND o.created_at < NOW() - INTERVAL '30 minutes'
-		),
-		cancel_orders AS (
-			UPDATE orders SET status = $4 WHERE id IN (SELECT id FROM stale) RETURNING id
-		)
-		UPDATE payments SET status = $5
-		WHERE order_id IN (SELECT id FROM cancel_orders) AND status = $3
-	`, studentID, models.OrderStatusReceived, models.PaymentStatusCreated, models.OrderStatusCancelled, models.PaymentStatusFailed)
+	// Stale unpaid order reconciliation is safely handled asynchronously by PaymentReconciler worker
 
 	// Check if student is blocked
 	var status string
@@ -600,8 +584,6 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 
 // StudentVerifyPayment checks payment signatures and marks the order as paid.
 func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Request) {
-	studentID := r.Context().Value("user_id").(string)
-
 	var req VerifyPaymentRequest
 	if err := jsonNewDecoder(r, &req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid payment details")
@@ -621,66 +603,11 @@ func (h *HandlerContext) StudentVerifyPayment(w http.ResponseWriter, r *http.Req
 
 	ctx := r.Context()
 
-	// Idempotent success if already paid for this student's order
-	var currentStatus string
-	err = h.DB.Pool.QueryRow(ctx, `
-		SELECT p.status
-		FROM payments p
-		JOIN orders o ON o.id = p.order_id
-		WHERE p.order_id = $1 AND p.razorpay_order_id = $2 AND o.student_id = $3
-	`, req.OrderID, req.RazorpayOrderID, studentID).Scan(&currentStatus)
+	// Call central, thread-safe, idempotent ConfirmPaymentAndOrder
+	err = h.ConfirmPaymentAndOrder(ctx, req.RazorpayOrderID, req.RazorpayPaymentID, req.RazorpaySignature, "frontend_callback", 0, "INR", "")
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "payment record not found for this order")
+		RespondError(w, http.StatusBadRequest, "payment verification failed: "+err.Error())
 		return
-	}
-	if currentStatus == models.PaymentStatusPaid {
-		RespondJSON(w, http.StatusOK, map[string]string{"message": "payment already verified"})
-		return
-	}
-	if currentStatus != models.PaymentStatusCreated {
-		RespondError(w, http.StatusBadRequest, "payment cannot be verified in status: "+currentStatus)
-		return
-	}
-
-	tx, err := h.DB.Pool.Begin(ctx)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "transaction failed")
-		return
-	}
-	defer tx.Rollback(ctx)
-
-	updatePayment := `
-		UPDATE payments p
-		SET status = $1, razorpay_payment_id = $2, razorpay_signature = $3
-		FROM orders o
-		WHERE p.order_id = o.id
-		  AND p.order_id = $4
-		  AND p.razorpay_order_id = $5
-		  AND o.student_id = $6
-		  AND p.status = $7
-	`
-	res, err := tx.Exec(ctx, updatePayment, models.PaymentStatusPaid, req.RazorpayPaymentID, req.RazorpaySignature, req.OrderID, req.RazorpayOrderID, studentID, models.PaymentStatusCreated)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to update payment records")
-		return
-	}
-	if res.RowsAffected() != 1 {
-		RespondError(w, http.StatusConflict, "payment was not updated; it may already be processed")
-		return
-	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "failed to finalize transaction")
-		return
-	}
-
-	if h.FCMService != nil {
-		var token string
-		h.DB.Pool.QueryRow(ctx, "SELECT fcm_token FROM students WHERE id = $1 AND fcm_token IS NOT NULL", studentID).Scan(&token)
-		if token != "" {
-			_ = h.FCMService.SendToUser(ctx, token, "Order Received!", "Your payment was successful and we are preparing your order.")
-		}
 	}
 
 	RespondJSON(w, http.StatusOK, map[string]string{"message": "payment verified and order confirmed successfully"})
@@ -889,7 +816,7 @@ func (h *HandlerContext) StudentGetHistory(w http.ResponseWriter, r *http.Reques
 		FROM orders o
 		JOIN payments p ON o.id = p.order_id
 		LEFT JOIN delivery_assignments da ON o.id = da.order_id
-		WHERE o.student_id = $1 AND p.status = 'paid'
+		WHERE o.student_id = $1 AND p.status IN ('paid', 'reconciliation_required')
 		ORDER BY o.created_at DESC
 	`
 	rows, err := h.DB.Pool.Query(ctx, query, studentID)

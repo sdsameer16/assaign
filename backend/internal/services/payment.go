@@ -147,6 +147,104 @@ func (ps *PaymentService) VerifyPaymentSignature(orderID, paymentID, signature s
 
 
 
+type RazorpayPaymentEntity struct {
+	ID          string `json:"id"`
+	Entity      string `json:"entity"`
+	Amount      int64  `json:"amount"`
+	Currency    string `json:"currency"`
+	Status      string `json:"status"`
+	OrderID     string `json:"order_id"`
+	Method      string `json:"method"`
+	Captured    bool   `json:"captured"`
+	Description string `json:"description"`
+}
+
+type RazorpayPaymentsListResponse struct {
+	Entity string                  `json:"entity"`
+	Count  int                     `json:"count"`
+	Items  []RazorpayPaymentEntity `json:"items"`
+}
+
+// FetchRazorpayOrderPayments retrieves all payments associated with a Razorpay Order ID.
+func (ps *PaymentService) FetchRazorpayOrderPayments(razorpayOrderID string) ([]RazorpayPaymentEntity, error) {
+	if razorpayOrderID == "" {
+		return nil, errors.New("razorpay order id is empty")
+	}
+	if ps.keyID == "" || ps.keySecret == "" {
+		return nil, errors.New("razorpay credentials are not set")
+	}
+
+	url := fmt.Sprintf("https://api.razorpay.com/v1/orders/%s/payments", razorpayOrderID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http request: %w", err)
+	}
+
+	req.SetBasicAuth(ps.keyID, ps.keySecret)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("razorpay api status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp RazorpayPaymentsListResponse
+	if err := json.Unmarshal(bodyBytes, &listResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal payments list: %w", err)
+	}
+
+	return listResp.Items, nil
+}
+
+// FetchRazorpayPayment retrieves payment details for a specific Razorpay Payment ID.
+func (ps *PaymentService) FetchRazorpayPayment(razorpayPaymentID string) (*RazorpayPaymentEntity, error) {
+	if razorpayPaymentID == "" {
+		return nil, errors.New("razorpay payment id is empty")
+	}
+	if ps.keyID == "" || ps.keySecret == "" {
+		return nil, errors.New("razorpay credentials are not set")
+	}
+
+	url := fmt.Sprintf("https://api.razorpay.com/v1/payments/%s", razorpayPaymentID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http request: %w", err)
+	}
+
+	req.SetBasicAuth(ps.keyID, ps.keySecret)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("razorpay api status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var paymentEntity RazorpayPaymentEntity
+	if err := json.Unmarshal(bodyBytes, &paymentEntity); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal payment: %w", err)
+	}
+
+	return &paymentEntity, nil
+}
+
 // CreateRefund issues a full refund for a captured Razorpay payment.
 func (ps *PaymentService) CreateRefund(paymentID string) error {
 	if paymentID == "" {

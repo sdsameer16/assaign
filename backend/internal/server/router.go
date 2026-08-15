@@ -102,6 +102,8 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Put("/menu-schedules/{id}", hCtx.UpdateMenuSchedule)
 				r.Delete("/menu-schedules/{id}", hCtx.DeleteMenuSchedule)
 				r.Post("/send-notification", hCtx.AdminSendNotification)
+				r.Get("/payments/health", hCtx.AdminGetPaymentHealth)
+				r.Post("/payments/{id}/reconcile", hCtx.AdminReconcilePayment)
 			})
 
 

@@ -693,8 +693,8 @@ export default function StudentPortal() {
   const fetchOrderHistory = async () => {
     try {
       const history = await studentApi.getHistory();
-      const paidHistory = (history || []).filter((o: any) => o.payment_status === "paid");
-      setOrderHistory(paidHistory);
+      const validHistory = (history || []).filter((o: any) => o.payment_status === "paid" || o.payment_status === "reconciliation_required");
+      setOrderHistory(validHistory);
     } catch (e) {
       console.error("Failed to load order history:", e);
     }
@@ -738,7 +738,7 @@ export default function StudentPortal() {
           (o) =>
             o.status !== "delivered" &&
             o.status !== "cancelled" &&
-            o.payment_status === "paid" &&
+            (o.payment_status === "paid" || o.payment_status === "reconciliation_required") &&
             !(o.status === "out_of_stock" && dismissed.includes(o.id))
         );
         const ids = activeOrders.map((o) => o.id);
