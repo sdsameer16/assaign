@@ -7,6 +7,10 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "npm run build --workspace=apps/student-portal",
+    "build:student": "npm run build --workspace=apps/student-portal",
+    "build:admin": "npm run build --workspace=apps/admin-dashboard",
+    "build:delivery": "npm run build --workspace=apps/delivery-partner-app",
     "dev:student": "npm run dev --workspace=apps/student-portal",
     "dev:admin": "npm run dev --workspace=apps/admin-dashboard",
     "dev:delivery": "npm run dev --workspace=apps/delivery-partner-app",

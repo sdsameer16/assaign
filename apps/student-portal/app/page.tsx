@@ -1581,6 +1581,10 @@ export default function StudentPortal() {
         return;
       }
 
+      const studentEmail =
+        profile?.email ||
+        (profile?.mobile_number ? `${profile.mobile_number}@campusbites.com` : "student@campusbites.com");
+
       const options = {
         key: razorpayKey,
         amount: Math.round(orderData.total_amount * 100),
@@ -1588,6 +1592,10 @@ export default function StudentPortal() {
         name: "CampusBites",
         description: `Order #${orderData.order_number} (Floor Delivery)`,
         order_id: orderData.razorpay_order_id,
+        retry: {
+          enabled: true,
+          max_count: 3,
+        },
         handler: async (response: any) => {
           try {
             await studentApi.verifyPayment({
@@ -1609,7 +1617,7 @@ export default function StudentPortal() {
             setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
             setSelectedTrackingID(orderData.order_id);
             setIsCartOpen(false);
-            fetchOrderHistory();
+            await fetchOrderHistory();
             alert("🎉 Payment successful! Your order has been placed.");
           } catch (e: any) {
             alert("Payment verification failed: " + e.message);
@@ -1625,6 +1633,7 @@ export default function StudentPortal() {
         prefill: {
           name: profile?.short_name || "Student",
           contact: profile?.mobile_number || "",
+          email: studentEmail,
         },
         theme: { color: "#f97316" },
       };
