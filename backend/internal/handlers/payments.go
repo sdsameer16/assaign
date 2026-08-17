@@ -165,7 +165,7 @@ func (h *HandlerContext) ConfirmPaymentAndOrder(
 			INSERT INTO order_status_history (order_id, status, changed_by, changed_at)
 			VALUES ($1, $2, $3, NOW())
 		`
-		_, err = tx.Exec(ctx, insertHistorySQL, models.OrderStatusReceived, studentID)
+		_, err = tx.Exec(ctx, insertHistorySQL, orderID, models.OrderStatusReceived, studentID)
 		if err != nil {
 			return fmt.Errorf("failed to insert order status history: %w", err)
 		}
