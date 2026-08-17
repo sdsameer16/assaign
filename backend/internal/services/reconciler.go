@@ -114,6 +114,9 @@ func (r *PaymentReconciler) reconcileSinglePayment(
 	payStatus string,
 	orderStatus string,
 ) {
+	_ = amount
+	_ = orderStatus
+
 	if razorpayOrderID == "" {
 		return
 	}

@@ -579,6 +579,7 @@ func (h *HandlerContext) StudentCreateOrder(w http.ResponseWriter, r *http.Reque
 		"order_number":      orderNum,
 		"total_amount":      totalAmount,
 		"razorpay_order_id": rzpOrderID,
+		"razorpay_key_id":   h.PaymentService.GetKeyID(),
 	})
 }
 

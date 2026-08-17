@@ -48,6 +48,14 @@ func NewPaymentService(keyID, keySecret, webhookSecret string) *PaymentService {
 	}
 }
 
+// GetKeyID returns the configured Razorpay Key ID.
+func (ps *PaymentService) GetKeyID() string {
+	if ps == nil {
+		return ""
+	}
+	return ps.keyID
+}
+
 // CreateRazorpayOrder creates an order in Razorpay's API.
 func (ps *PaymentService) CreateRazorpayOrder(amount float64) (string, error) {
 	amountPaise := int64(amount * 100)

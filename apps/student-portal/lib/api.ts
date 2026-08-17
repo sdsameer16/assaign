@@ -148,6 +148,7 @@ export const studentApi = {
       order_number: string;
       total_amount: number;
       razorpay_order_id: string;
+      razorpay_key_id?: string;
       status?: string;
       message?: string;
     }>("/orders", {

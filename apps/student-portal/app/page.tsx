@@ -60,6 +60,7 @@ import {
   logout,
   setSession,
 } from "../lib/api";
+import { loadRazorpayScript } from "../lib/razorpay";
 
 const AnimatedPrinterIcon = ({ className }: { className?: string }) => {
   return (
@@ -1561,68 +1562,81 @@ export default function StudentPortal() {
         print_jobs: printJobsPayload,
       });
 
-      if ((window as any).Razorpay && process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
-        const options = {
-          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-          amount: Math.round(orderData.total_amount * 100),
-          currency: "INR",
-          name: "CampusBites",
-          description: `Order #${orderData.order_number} (Floor Delivery)`,
-          order_id: orderData.razorpay_order_id,
-          handler: async (response: any) => {
-            try {
-              await studentApi.verifyPayment({
-                order_id: orderData.order_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              });
-
-              // Empty cart ONLY after payment verification succeeds
-              setCart({});
-              setPrintJobs([]);
-              if (typeof window !== "undefined") {
-                localStorage.removeItem("campusbites_cart_cache");
-                localStorage.removeItem("campusbites_guest_cart");
-              }
-              syncCartState({}, isLoggedIn);
-
-              setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
-              setSelectedTrackingID(orderData.order_id);
-              setIsCartOpen(false);
-              fetchOrderHistory();
-            } catch (e: any) {
-              alert("Payment verification failed: " + e.message);
-            }
-          },
-
-          prefill: {
-            name: profile?.short_name || "Student",
-            contact: profile?.mobile_number || "",
-          },
-          theme: { color: "#f97316" },
-        };
-        const rzp = new (window as any).Razorpay(options);
-        rzp.open();
-      } else {
-        // Fallback for environment without Razorpay Key ID
-        setCart({});
-        setPrintJobs([]);
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("campusbites_cart_cache");
-          localStorage.removeItem("campusbites_guest_cart");
-        }
-        syncCartState({}, isLoggedIn);
-
-        setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
-        setSelectedTrackingID(orderData.order_id);
-        setIsCartOpen(false);
-        fetchOrderHistory();
-        alert("Order created successfully!");
+      // Guarantee Razorpay SDK script is loaded dynamically
+      const sdkLoaded = await loadRazorpayScript();
+      if (!sdkLoaded) {
+        alert("Failed to load Razorpay payment gateway script. Please check your internet connection.");
+        setCheckoutLoading(false);
+        return;
       }
+
+      const razorpayKey =
+        orderData.razorpay_key_id ||
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+        "rzp_live_TEe3nify36SPWu";
+
+      if (!orderData.razorpay_order_id || !razorpayKey) {
+        alert("Unable to initiate online payment: Razorpay order ID or API key missing.");
+        setCheckoutLoading(false);
+        return;
+      }
+
+      const options = {
+        key: razorpayKey,
+        amount: Math.round(orderData.total_amount * 100),
+        currency: "INR",
+        name: "CampusBites",
+        description: `Order #${orderData.order_number} (Floor Delivery)`,
+        order_id: orderData.razorpay_order_id,
+        handler: async (response: any) => {
+          try {
+            await studentApi.verifyPayment({
+              order_id: orderData.order_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            // Empty cart ONLY after payment verification succeeds
+            setCart({});
+            setPrintJobs([]);
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("campusbites_cart_cache");
+              localStorage.removeItem("campusbites_guest_cart");
+            }
+            syncCartState({}, isLoggedIn);
+
+            setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
+            setSelectedTrackingID(orderData.order_id);
+            setIsCartOpen(false);
+            fetchOrderHistory();
+            alert("🎉 Payment successful! Your order has been placed.");
+          } catch (e: any) {
+            alert("Payment verification failed: " + e.message);
+          } finally {
+            setCheckoutLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setCheckoutLoading(false);
+          },
+        },
+        prefill: {
+          name: profile?.short_name || "Student",
+          contact: profile?.mobile_number || "",
+        },
+        theme: { color: "#f97316" },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on("payment.failed", (resp: any) => {
+        alert("Payment failed: " + (resp?.error?.description || "Transaction declined."));
+        setCheckoutLoading(false);
+      });
+      rzp.open();
     } catch (err: any) {
       alert("Failed to place order: " + err.message);
-    } finally {
       setCheckoutLoading(false);
     }
   };
@@ -1636,7 +1650,7 @@ export default function StudentPortal() {
 
   return (
     <div className={`min-h-screen font-sans pb-24 transition-colors duration-300 ${theme === "dark" ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"}`}>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
 
       {/* Header & Fixed Top Bar */}
       <header
