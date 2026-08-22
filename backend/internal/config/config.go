@@ -98,6 +98,8 @@ func LoadConfig() *Config {
 	allowedOrigins := parseOrigins(os.Getenv("ALLOWED_ORIGINS"))
 	if len(allowedOrigins) == 0 {
 		allowedOrigins = []string{
+			"https://vignancampusbites.netlify.app",
+			"https://campusbites.netlify.app",
 			"http://localhost:3000",
 			"http://localhost:3001",
 			"http://localhost:3002",

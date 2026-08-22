@@ -45,6 +45,10 @@ func originAllowed(origin string) bool {
 	if len(allowedOrigins) == 0 {
 		return true
 	}
+	lowerOrigin := strings.ToLower(origin)
+	if strings.HasSuffix(lowerOrigin, ".netlify.app") {
+		return true
+	}
 	for _, o := range allowedOrigins {
 		if o == "*" || strings.EqualFold(o, origin) {
 			return true
