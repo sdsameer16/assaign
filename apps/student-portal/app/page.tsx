@@ -40,6 +40,7 @@ import {
   Mail,
   Sun,
   Moon,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Product,
@@ -866,7 +867,6 @@ export default function StudentPortal() {
       setProducts(
         (data.products || []).filter(
           (p: Product) =>
-            p.is_available &&
             !p.name.toLowerCase().includes("load test") &&
             !p.name.toLowerCase().includes("test category")
         )
@@ -1071,6 +1071,11 @@ export default function StudentPortal() {
 
   // Cart operations with sync
   const addToCart = (productId: string) => {
+    const prod = products.find((p) => p.id === productId);
+    if (prod && !prod.is_available) {
+      alert(`"${prod.name}" is currently out of stock.`);
+      return;
+    }
     setCart((prev) => {
       const updated = { ...prev, [productId]: (prev[productId] || 0) + 1 };
       syncCartState(updated, isLoggedIn);
@@ -1095,6 +1100,23 @@ export default function StudentPortal() {
     setCart((prev) => {
       const updated = { ...prev };
       delete updated[productId];
+      syncCartState(updated, isLoggedIn);
+      return updated;
+    });
+  };
+
+  // Helper to identify and clear out-of-stock items from cart
+  const outOfStockCartItemIds = useMemo(() => {
+    return Object.keys(cart).filter((id) => {
+      const prod = products.find((p) => p.id === id);
+      return !prod || !prod.is_available;
+    });
+  }, [cart, products]);
+
+  const clearOutOfStockCartItems = () => {
+    setCart((prev) => {
+      const updated = { ...prev };
+      outOfStockCartItemIds.forEach((id) => delete updated[id]);
       syncCartState(updated, isLoggedIn);
       return updated;
     });
@@ -1208,7 +1230,8 @@ export default function StudentPortal() {
   const getFoodTotal = () => {
     return Object.entries(cart).reduce((total, [id, qty]) => {
       const prod = products.find((p) => p.id === id);
-      return total + (prod ? prod.selling_price * qty : 0);
+      if (!prod || !prod.is_available) return total;
+      return total + prod.selling_price * qty;
     }, 0);
   };
 
@@ -1563,6 +1586,19 @@ export default function StudentPortal() {
       return;
     }
 
+    // Validate out of stock items in cart before proceeding to order creation / payment
+    if (outOfStockCartItemIds.length > 0) {
+      const names = outOfStockCartItemIds
+        .map((id) => products.find((p) => p.id === id)?.name || "Item")
+        .join(", ");
+      alert(
+        `⚠️ The following item(s) in your cart are currently out of stock:\n• ${names}\n\nThey will be automatically removed from your cart so you can proceed.`
+      );
+      clearOutOfStockCartItems();
+      setCheckoutLoading(false);
+      return;
+    }
+
     if (is0001CutoffMode) {
       alert(
         "🚀 Something BIG is Cooking!\nWe're taking a short break today to bring you something even better.\nCampusBites will be back tomorrow! ❤️\n\nStay tuned — we've got something special coming your way. 🔥"
@@ -1588,10 +1624,15 @@ export default function StudentPortal() {
 
     try {
       setCheckoutLoading(true);
-      const itemsPayload = Object.entries(cart).map(([product_id, quantity]) => ({
-        product_id,
-        quantity,
-      }));
+      const itemsPayload = Object.entries(cart)
+        .filter(([product_id]) => {
+          const prod = products.find((p) => p.id === product_id);
+          return prod && prod.is_available;
+        })
+        .map(([product_id, quantity]) => ({
+          product_id,
+          quantity,
+        }));
 
       const printJobsPayload = printJobs.map((j) => ({
         file_url: j.file_url,
@@ -1663,12 +1704,14 @@ export default function StudentPortal() {
               localStorage.removeItem("campusbites_cart_cache");
               localStorage.removeItem("campusbites_guest_cart");
             }
-            syncCartState({}, isLoggedIn);
+            await syncCartState({}, isLoggedIn);
 
+            setDismissedBannerIDs((prev) => prev.filter((id) => id !== orderData.order_id));
             setActiveOrderIDs((prev) => Array.from(new Set([...prev, orderData.order_id])));
             setSelectedTrackingID(orderData.order_id);
             setIsCartOpen(false);
             await fetchOrderHistory();
+            window.scrollTo({ top: 0, behavior: "smooth" });
             alert("🎉 Payment successful! Your order has been placed.");
           } catch (e: any) {
             alert("Payment verification failed: " + e.message);
@@ -1696,7 +1739,13 @@ export default function StudentPortal() {
       });
       rzp.open();
     } catch (err: any) {
-      alert("Failed to place order: " + err.message);
+      const msg = err.message || "";
+      if (msg.toLowerCase().includes("out of stock")) {
+        alert(`⚠️ ${msg}\n\nRefreshing menu catalog to update availability.`);
+        loadMenu();
+      } else {
+        alert("Failed to place order: " + msg);
+      }
       setCheckoutLoading(false);
     }
   };
@@ -2804,7 +2853,11 @@ export default function StudentPortal() {
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                       />
-                      {product.mrp > product.selling_price && (
+                      {!product.is_available ? (
+                        <span className="absolute top-3 left-3 bg-red-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md uppercase tracking-wider">
+                          Out of Stock
+                        </span>
+                      ) : product.mrp > product.selling_price && (
                         <span className="absolute top-3 left-3 bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full shadow-md">
                           SAVE ₹{Math.round(product.mrp - product.selling_price)}
                         </span>
@@ -2813,7 +2866,9 @@ export default function StudentPortal() {
 
                     <div className="space-y-1">
                       <h4 className={`font-extrabold text-base leading-snug line-clamp-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{product.name}</h4>
-                      <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>⚡ Hand-delivered in 15–20 mins</p>
+                      <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
+                        {!product.is_available ? "❌ Currently Unavailable" : "⚡ Hand-delivered in 15–20 mins"}
+                      </p>
                       <div className="flex items-baseline space-x-2 pt-1">
                         <span className="text-lg font-black text-orange-500">₹{product.selling_price}</span>
                         {product.mrp > product.selling_price && (
@@ -2822,7 +2877,14 @@ export default function StudentPortal() {
                       </div>
                     </div>
 
-                    {isAdded ? (
+                    {!product.is_available ? (
+                      <button
+                        disabled
+                        className="w-full font-bold py-2.5 rounded-2xl text-xs bg-slate-800/80 text-slate-400 border border-slate-700/60 cursor-not-allowed text-center"
+                      >
+                        Out of Stock
+                      </button>
+                    ) : isAdded ? (
                       <div className="flex items-center justify-between bg-orange-500 text-slate-950 rounded-2xl p-1.5 font-black text-sm shadow-md">
                         <button
                           onClick={() => removeFromCart(product.id)}
@@ -3034,25 +3096,61 @@ export default function StudentPortal() {
                 </div>
               ) : (
                 <>
+                  {/* Out of Stock Warning Banner */}
+                  {outOfStockCartItemIds.length > 0 && (
+                    <div className="bg-red-950/60 border border-red-500/40 rounded-2xl p-3.5 space-y-2 text-xs">
+                      <div className="flex items-center space-x-2 text-red-400 font-bold">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                        <span>⚠️ {outOfStockCartItemIds.length} item(s) in cart are out of stock</span>
+                      </div>
+                      <p className="text-red-300/80 text-[11px]">
+                        Please remove unavailable items to proceed with payment.
+                      </p>
+                      <button
+                        onClick={clearOutOfStockCartItems}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded-xl transition text-xs flex items-center justify-center space-x-1 shadow-sm"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove Out-of-Stock Items</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Food Items */}
                   {Object.entries(cart).map(([prodId, qty]) => {
                     const prod = products.find((p) => p.id === prodId);
-                    if (!prod) return null;
+                    const isOutOfStock = !prod || !prod.is_available;
+                    const prodName = prod ? prod.name : "Unavailable Product";
+                    const prodPrice = prod ? prod.selling_price : 0;
+                    const prodImage = prod?.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=150&q=80";
+
                     return (
                       <div
                         key={prodId}
                         className={`border rounded-2xl p-3 flex items-center justify-between space-x-3 transition-colors ${
-                          theme === "dark" ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                          isOutOfStock
+                            ? "bg-red-950/30 border-red-500/50"
+                            : theme === "dark"
+                            ? "bg-slate-950 border-slate-800"
+                            : "bg-slate-50 border-slate-200"
                         }`}
                       >
                         <img
-                          src={prod.image_url || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=150&q=80"}
-                          alt={prod.name}
-                          className="w-14 h-14 rounded-xl object-cover shrink-0"
+                          src={prodImage}
+                          alt={prodName}
+                          className={`w-14 h-14 rounded-xl object-cover shrink-0 ${isOutOfStock ? "grayscale opacity-60" : ""}`}
                         />
                         <div className="flex-1 min-w-0">
-                          <h5 className={`text-xs font-bold truncate ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{prod.name}</h5>
-                          <p className="text-xs font-extrabold text-orange-500">₹{prod.selling_price * qty}</p>
+                          <h5 className={`text-xs font-bold truncate ${isOutOfStock ? "text-red-300 line-through" : theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                            {prodName}
+                          </h5>
+                          {isOutOfStock ? (
+                            <span className="text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                              Out of Stock
+                            </span>
+                          ) : (
+                            <p className="text-xs font-extrabold text-orange-500">₹{prodPrice * qty}</p>
+                          )}
                         </div>
                         <div className={`flex items-center space-x-2 border rounded-xl p-1 transition-colors ${
                           theme === "dark" ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
@@ -3063,9 +3161,13 @@ export default function StudentPortal() {
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <span className={`text-xs font-bold px-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{qty}</span>
-                          <button onClick={() => addToCart(prodId)} className={`w-6 h-6 flex items-center justify-center transition ${
-                            theme === "dark" ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
-                          }`}>
+                          <button
+                            onClick={() => !isOutOfStock && addToCart(prodId)}
+                            disabled={isOutOfStock}
+                            className={`w-6 h-6 flex items-center justify-center transition ${
+                              isOutOfStock ? "opacity-25 cursor-not-allowed text-slate-600" : theme === "dark" ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
