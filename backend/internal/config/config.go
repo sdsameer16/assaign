@@ -57,8 +57,11 @@ func LoadConfig() *Config {
 		log.Println("WARNING: using default JWT_SECRET; set JWT_SECRET for non-local use")
 	}
 
-	ocrProvider := getEnv("OCR_PROVIDER", "mock")
-	ocrApiKey := getEnv("OCR_API_KEY", "mock-ocr-key-12345")
+	ocrProvider := getEnv("OCR_PROVIDER", "ocrspace")
+	ocrApiKey := getEnv("OCR_API_KEY", "")
+	if ocrApiKey == "" || ocrApiKey == "mock-ocr-key-12345" {
+		log.Println("WARNING: OCR_API_KEY is not configured in environment settings.")
+	}
 
 	rzpKeyID := os.Getenv("RAZORPAY_KEY_ID")
 	rzpSecret := os.Getenv("RAZORPAY_KEY_SECRET")

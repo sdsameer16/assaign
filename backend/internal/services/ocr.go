@@ -41,6 +41,7 @@ type OCRSpaceResponse struct {
 func (s *OCRService) resolveAPIKey() string {
 	key := strings.TrimSpace(s.apiKey)
 	if key == "" || key == "mock-ocr-key-12345" {
+		log.Println("WARNING: OCR_API_KEY is missing or set to placeholder. Using default key, which may be rate-limited.")
 		return "helloworld"
 	}
 	return key
@@ -235,26 +236,13 @@ func (s *OCRService) extractNameAndRoll(parsedText, shortName, rollNumber string
 
 // ProcessVerification runs OCR and calculates name matching scores.
 func (s *OCRService) ProcessVerification(shortName, rollNumber, idCardURL string) (*models.StudentDocument, error) {
-	var extractedName, extractedRoll string
-	var nameSimilarity float64
-
-	useMock := strings.EqualFold(strings.TrimSpace(s.provider), "mock") &&
-		!strings.HasPrefix(idCardURL, "http://") &&
-		!strings.HasPrefix(idCardURL, "https://")
-
-	if useMock {
-		extractedName = simulateOcrText(shortName)
-		extractedRoll = simulateOcrText(rollNumber)
-		nameSimilarity = s.CalculateSimilarity(strings.ToLower(shortName), strings.ToLower(extractedName))
-	} else {
-		parsedText, err := s.extractTextFromURL(idCardURL)
-		if err != nil {
-			log.Printf("OCR extraction failed: %v\n", err)
-			return nil, fmt.Errorf("could not read ID card text — please retake a clear photo of your ID: %w", err)
-		}
-		extractedName, extractedRoll, nameSimilarity = s.extractNameAndRoll(parsedText, shortName, rollNumber)
-		log.Printf("OCR extracted name=%q roll=%q score=%.2f\n", extractedName, extractedRoll, nameSimilarity*100)
+	parsedText, err := s.extractTextFromURL(idCardURL)
+	if err != nil {
+		log.Printf("OCR extraction failed: %v\n", err)
+		return nil, fmt.Errorf("could not read ID card text — please retake a clear photo of your ID: %w", err)
 	}
+	extractedName, extractedRoll, nameSimilarity := s.extractNameAndRoll(parsedText, shortName, rollNumber)
+	log.Printf("OCR extracted name=%q roll=%q score=%.2f\n", extractedName, extractedRoll, nameSimilarity*100)
 
 	confidence := models.ConfidenceLevelLow
 	if nameSimilarity >= 0.85 {
@@ -271,34 +259,6 @@ func (s *OCRService) ProcessVerification(shortName, rollNumber, idCardURL string
 		DuplicateFlag:          false,
 		ConfidenceLevel:        confidence,
 	}, nil
-}
-
-func simulateOcrText(s string) string {
-	if len(s) < 3 {
-		return s
-	}
-	runes := []rune(s)
-	replaced := false
-	for i, r := range runes {
-		switch r {
-		case 'o', 'O':
-			runes[i] = '0'
-			replaced = true
-		case 's', 'S':
-			runes[i] = '5'
-			replaced = true
-		case 'i', 'I':
-			runes[i] = '1'
-			replaced = true
-		}
-		if replaced {
-			break
-		}
-	}
-	if !replaced && len(runes) > 2 {
-		runes[len(runes)-1], runes[len(runes)-2] = runes[len(runes)-2], runes[len(runes)-1]
-	}
-	return string(runes)
 }
 
 // CalculateSimilarity calculates Levenshtein similarity score between 0.0 and 1.0.
