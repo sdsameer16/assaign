@@ -336,3 +336,208 @@ body {
   }
 }
 
+/* ==========================================================================
+   Raksha Bandhan Festive Animation Layer Styles & Wind Physics Keyframes
+   ========================================================================== */
+
+/* Top Marigold Garland Sway */
+.rakhi-garland-sway {
+  transform-origin: top center;
+  animation: rakhi-garland-sway-anim 6s ease-in-out infinite alternate;
+}
+
+@keyframes rakhi-garland-sway-anim {
+  0% {
+    transform: rotate(-0.7deg) translateY(0px);
+  }
+  50% {
+    transform: rotate(0.4deg) translateY(1.5px);
+  }
+  100% {
+    transform: rotate(0.8deg) translateY(-1px);
+  }
+}
+
+/* Tassel Micro Sway */
+.rakhi-tassel-sway {
+  transform-origin: top center;
+  animation: rakhi-tassel-sway-anim 4.5s ease-in-out infinite alternate;
+}
+
+@keyframes rakhi-tassel-sway-anim {
+  0% {
+    transform: rotate(-1.5deg) skewX(-1deg);
+  }
+  40% {
+    transform: rotate(1.2deg) skewX(0.8deg);
+  }
+  75% {
+    transform: rotate(-0.8deg) skewX(-0.5deg);
+  }
+  100% {
+    transform: rotate(1.8deg) skewX(1.2deg);
+  }
+}
+
+/* Corner Rakhi Gentle Pulse & Spin Glow */
+.rakhi-jewel-pulse {
+  animation: rakhi-jewel-pulse-anim 3s ease-in-out infinite;
+}
+
+@keyframes rakhi-jewel-pulse-anim {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.7));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(244, 67, 54, 0.9));
+    transform: scale(1.04);
+  }
+}
+
+/* Irregular Organic Wind Effect for Flying Rakhi Loose Threads */
+/* Strand 1 - Main Braided End */
+.rakhi-thread-wind-1 {
+  transform-origin: top left;
+  animation: rakhi-thread-wind-anim-1 2.3s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes rakhi-thread-wind-anim-1 {
+  0% {
+    transform: rotate(-4deg) skewX(-2deg) translateY(0px) scaleY(1);
+  }
+  18% {
+    transform: rotate(3deg) skewX(1.5deg) translateY(-1.5px) scaleY(0.98);
+  }
+  37% {
+    transform: rotate(-2deg) skewX(-1deg) translateY(1px) scaleY(1.02);
+  }
+  54% {
+    transform: rotate(5deg) skewX(2.5deg) translateY(-2px) scaleY(0.97);
+  }
+  73% {
+    transform: rotate(-1deg) skewX(-0.8deg) translateY(0.5px) scaleY(1.01);
+  }
+  89% {
+    transform: rotate(4deg) skewX(1.8deg) translateY(-1px) scaleY(0.99);
+  }
+  100% {
+    transform: rotate(-3deg) skewX(-1.5deg) translateY(1.2px) scaleY(1);
+  }
+}
+
+/* Strand 2 - Secondary Loose Thread */
+.rakhi-thread-wind-2 {
+  transform-origin: top left;
+  animation: rakhi-thread-wind-anim-2 1.9s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes rakhi-thread-wind-anim-2 {
+  0% {
+    transform: rotate(6deg) skewX(3deg) translateY(0px);
+  }
+  23% {
+    transform: rotate(-5deg) skewX(-2.5deg) translateY(1.8px);
+  }
+  41% {
+    transform: rotate(4deg) skewX(2deg) translateY(-1.2px);
+  }
+  68% {
+    transform: rotate(-6deg) skewX(-3deg) translateY(2.2px);
+  }
+  82% {
+    transform: rotate(2deg) skewX(1deg) translateY(-0.8px);
+  }
+  100% {
+    transform: rotate(-4deg) skewX(-2deg) translateY(1px);
+  }
+}
+
+/* Strand 3 - Accent Tassel Strand */
+.rakhi-thread-wind-3 {
+  transform-origin: top left;
+  animation: rakhi-thread-wind-anim-3 2.7s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes rakhi-thread-wind-anim-3 {
+  0% {
+    transform: rotate(-3deg) skewY(-1deg) translateX(0px);
+  }
+  15% {
+    transform: rotate(5deg) skewY(2deg) translateX(1px);
+  }
+  33% {
+    transform: rotate(-4deg) skewY(-1.5deg) translateX(-1.5px);
+  }
+  58% {
+    transform: rotate(3deg) skewY(1deg) translateX(0.8px);
+  }
+  77% {
+    transform: rotate(-6deg) skewY(-2.5deg) translateX(-1px);
+  }
+  92% {
+    transform: rotate(2deg) skewY(0.8deg) translateX(1.2px);
+  }
+  100% {
+    transform: rotate(-2deg) skewY(-0.5deg) translateX(-0.5px);
+  }
+}
+
+/* Flying Motion Trail Glow */
+.rakhi-motion-trail {
+  animation: rakhi-motion-trail-pulse 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes rakhi-motion-trail-pulse {
+  0% {
+    opacity: 0.6;
+    filter: drop-shadow(0 0 6px rgba(255, 179, 0, 0.6));
+  }
+  100% {
+    opacity: 0.95;
+    filter: drop-shadow(0 0 14px rgba(255, 111, 0, 0.9));
+  }
+}
+
+/* Falling Sparkles and Petals */
+.rakhi-sparkle-float {
+  animation: rakhi-sparkle-float-anim 3.5s ease-in-out infinite;
+}
+
+@keyframes rakhi-sparkle-float-anim {
+  0% {
+    transform: translateY(0px) rotate(0deg) scale(0.8);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(6px) rotate(30deg) scale(1.1);
+  }
+  80% {
+    opacity: 0.8;
+    transform: translateY(28px) rotate(140deg) scale(0.9);
+  }
+  100% {
+    transform: translateY(40px) rotate(210deg) scale(0.4);
+    opacity: 0;
+  }
+}
+
+/* Reduced Motion Safety */
+@media (prefers-reduced-motion: reduce) {
+  .rakhi-garland-sway,
+  .rakhi-tassel-sway,
+  .rakhi-jewel-pulse,
+  .rakhi-thread-wind-1,
+  .rakhi-thread-wind-2,
+  .rakhi-thread-wind-3,
+  .rakhi-motion-trail,
+  .rakhi-sparkle-float {
+    animation: none !important;
+  }
+}
+
+
