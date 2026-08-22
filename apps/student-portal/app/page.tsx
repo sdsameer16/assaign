@@ -23,6 +23,7 @@ import {
   Headphones,
   X,
   Printer,
+  Camera,
   Eye,
   Plus,
   Minus,
@@ -50,6 +51,7 @@ import {
   PrintSides,
   TrackingAd,
   MenuSchedule,
+  HostelBlock,
 } from "@campusbites/types";
 
 import { requestForToken, onMessageListener } from "../lib/firebase";
@@ -290,6 +292,16 @@ export default function StudentPortal() {
   const [regIDUrl, setRegIDUrl] = useState("");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, showCamera]);
 
   // Menu & Category states
   const [categories, setCategories] = useState<Category[]>([]);
@@ -320,6 +332,7 @@ export default function StudentPortal() {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [hostelBlocks, setHostelBlocks] = useState<HostelBlock[]>([]);
 
   // Dynamic Delivery Config State
   const [deliveryFee, setDeliveryFee] = useState(15);
@@ -525,10 +538,6 @@ export default function StudentPortal() {
 
   const [selectedSlotId, setSelectedSlotId] = useState("");
 
-  const [showCamera, setShowCamera] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const menuSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Load session, stored location, menu & cart on initialization
@@ -593,8 +602,20 @@ export default function StudentPortal() {
     fetchDeliverySlots();
     fetchDeliveryConfig();
     fetchPrintPricing();
+    fetchHostelBlocks();
     initializeCartState(Boolean(savedToken));
   }, []);
+
+  const fetchHostelBlocks = async () => {
+    try {
+      const blocks = await studentApi.getHostelBlocks();
+      if (blocks && blocks.length > 0) {
+        setHostelBlocks(blocks);
+      }
+    } catch (e) {
+      console.warn("Hostel blocks endpoint not active yet on server, falling back to default list:", e);
+    }
+  };
 
   const fetchDeliveryConfig = async () => {
     try {
@@ -981,9 +1002,9 @@ export default function StudentPortal() {
       alert("Please scan your college ID card before registering.");
       return;
     }
-    if (!ocrResult || ocrResult.similarity_score < 60) {
+    if (!ocrResult || ocrResult.similarity_score < 90) {
       alert(
-        "ID card scan did not match well enough. Please retake a clear photo of your ID."
+        "ID card scan match score must be 90% or higher to register. Please retake a clear photo of your ID card."
       );
       return;
     }
@@ -1031,6 +1052,11 @@ export default function StudentPortal() {
 
   // Saved Location Persistence
   const saveDeliveryAddress = (bld: string, flr: number, rm: string) => {
+    const selectedBlockObj = hostelBlocks.find((b) => b.name === bld);
+    if (selectedBlockObj && !selectedBlockObj.is_enabled) {
+      alert("We are not offering delivery here right now. Please choose another block; service will be available here very soon!");
+      return;
+    }
     setBuilding(bld);
     setFloor(flr);
     setRoomNumber(rm);
@@ -1519,6 +1545,12 @@ export default function StudentPortal() {
   const handleCheckout = async () => {
     if (!isLoggedIn) {
       alert("Please log in with your mobile number to place an order.");
+      return;
+    }
+    const selectedBlockObj = hostelBlocks.find((b) => b.name === building);
+    if (selectedBlockObj && !selectedBlockObj.is_enabled) {
+      alert("We are not offering delivery to " + building + " right now. Please choose another block; service will be available here very soon!");
+      setShowAddressModal(true);
       return;
     }
     if (!roomNumber.trim()) {
@@ -2387,17 +2419,50 @@ export default function StudentPortal() {
                     ID Card Verification Document
                   </span>
                   {regIDUrl && (
-                    <div className="h-24 bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
-                      <img src={regIDUrl} alt="ID" className="w-full h-full object-cover" />
+                    <div className="h-32 bg-slate-900 rounded-xl overflow-hidden border border-slate-800 relative">
+                      <img src={regIDUrl} alt="College ID Document" className="w-full h-full object-cover" />
                     </div>
                   )}
+                  {ocrResult && (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-left space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 font-medium">Extracted Name:</span>
+                        <span className="font-bold text-white">{ocrResult.extracted_name}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 font-medium">Extracted Roll:</span>
+                        <span className="font-bold text-white">{ocrResult.extracted_roll}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-slate-800 pt-1.5">
+                        <span className="text-slate-400 font-medium">Match Score:</span>
+                        <span className={`font-bold ${ocrResult.similarity_score >= 90 ? "text-emerald-400" : "text-amber-400"}`}>
+                          {ocrResult.similarity_score.toFixed(1)}% ({ocrResult.confidence})
+                        </span>
+                      </div>
+                      {ocrResult.similarity_score < 90 && (
+                        <p className="text-[11px] text-amber-400 font-semibold pt-1">
+                          ⚠️ Match score is below 90%. Please rescan your ID card in clear lighting to reach 90%+ match score.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={startCamera}
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl text-xs flex items-center justify-center space-x-2"
+                    disabled={ocrLoading}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition disabled:opacity-50"
                   >
+                    <Camera className="w-4 h-4" />
                     <span>📷 Scan ID (Live Camera)</span>
                   </button>
+
+                  {ocrLoading && (
+                    <div className="flex items-center justify-center space-x-2 text-orange-400 text-xs py-1">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Processing live OCR document scan...</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex space-x-3 pt-2">
                   <button
@@ -2407,13 +2472,23 @@ export default function StudentPortal() {
                   >
                     Back
                   </button>
-                  <button
-                    type="submit"
-                    disabled={isLoginLoading || !regIDUrl}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs disabled:opacity-40"
-                  >
-                    Verify & Create Profile
-                  </button>
+                  {ocrResult && ocrResult.similarity_score >= 90 ? (
+                    <button
+                      type="submit"
+                      disabled={isLoginLoading || !regIDUrl}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold py-2.5 rounded-xl text-xs shadow-lg transition"
+                    >
+                      Verify & Create Profile (90%+ Match)
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="flex-1 bg-slate-800 text-slate-500 font-bold py-2.5 rounded-xl text-xs opacity-50 cursor-not-allowed"
+                    >
+                      Verify (Requires 90%+ Match)
+                    </button>
+                  )}
                 </div>
               </form>
             )}
@@ -3175,65 +3250,91 @@ export default function StudentPortal() {
                 </button>
               </div>
 
-              <div className="space-y-3 text-xs">
-                <div>
-                  <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Building / Hostel Block</label>
-                  <select
-                    value={building}
-                    onChange={(e) => setBuilding(e.target.value)}
-                    className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
-                      theme === "dark"
-                        ? "bg-slate-950 border-slate-800 text-slate-100"
-                        : "bg-slate-50 border-slate-300 text-slate-900"
-                    }`}
-                  >
-                    <option value="N Block">N Block</option>
-                    <option value="A Block">A Block</option>
-                    <option value="H Block">H Block</option>
-                    <option value="U Block">U Block</option>
-                    <option value="Lara">Lara</option>
-                    <option value="Pharmacy">Pharmacy</option>
-                  </select>
-                </div>
+              {(() => {
+                const selectedBlockObj = hostelBlocks.find((b) => b.name === building);
+                const isBlockDisabled = selectedBlockObj ? !selectedBlockObj.is_enabled : false;
 
-                <div>
-                  <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Floor Number</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={floor}
-                    onChange={(e) => setFloor(parseInt(e.target.value, 10) || 0)}
-                    className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
-                      theme === "dark"
-                        ? "bg-slate-950 border-slate-800 text-slate-100"
-                        : "bg-slate-50 border-slate-300 text-slate-900"
-                    }`}
-                  />
-                </div>
+                return (
+                  <>
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Building / Hostel Block</label>
+                        <select
+                          value={building}
+                          onChange={(e) => setBuilding(e.target.value)}
+                          className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
+                            theme === "dark"
+                              ? "bg-slate-950 border-slate-800 text-slate-100"
+                              : "bg-slate-50 border-slate-300 text-slate-900"
+                          } ${isBlockDisabled ? "border-red-500 text-red-400 font-bold" : ""}`}
+                        >
+                          {hostelBlocks.length > 0 ? (
+                            hostelBlocks.map((b) => (
+                              <option key={b.id} value={b.name}>
+                                {b.name} {!b.is_enabled ? "(Delivery Unavailable)" : ""}
+                              </option>
+                            ))
+                          ) : (
+                            ["N Block", "A Block", "H Block", "U Block", "Lara", "Pharmacy"].map((b) => (
+                              <option key={b} value={b}>{b}</option>
+                            ))
+                          )}
+                        </select>
+                      </div>
 
-                <div>
-                  <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Room Number</label>
-                  <input
-                    type="text"
-                    value={roomNumber}
-                    onChange={(e) => setRoomNumber(e.target.value)}
-                    placeholder="501"
-                    className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
-                      theme === "dark"
-                        ? "bg-slate-950 border-slate-800 text-slate-100"
-                        : "bg-slate-50 border-slate-300 text-slate-900"
-                    }`}
-                  />
-                </div>
-              </div>
+                      {isBlockDisabled && (
+                        <div className="p-3 border border-red-500/80 rounded-xl text-red-500 font-bold text-xs space-y-1">
+                          <p className="flex items-center space-x-1">
+                            <span>🚫 We are not offering delivery here right now.</span>
+                          </p>
+                          <p className="text-[11px] text-red-500 font-medium">
+                            Please choose another block; service will be available here very soon!
+                          </p>
+                        </div>
+                      )}
 
-              <button
-                onClick={() => saveDeliveryAddress(building, floor, roomNumber)}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition"
-              >
-                Save Delivery Location
-              </button>
+                      <div>
+                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Floor Number</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          value={floor}
+                          onChange={(e) => setFloor(parseInt(e.target.value, 10) || 0)}
+                          className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
+                            theme === "dark"
+                              ? "bg-slate-950 border-slate-800 text-slate-100"
+                              : "bg-slate-50 border-slate-300 text-slate-900"
+                          }`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block font-bold mb-1 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Room Number</label>
+                        <input
+                          type="text"
+                          value={roomNumber}
+                          onChange={(e) => setRoomNumber(e.target.value)}
+                          placeholder="501"
+                          className={`w-full rounded-xl px-3 py-2.5 outline-none border transition ${
+                            theme === "dark"
+                              ? "bg-slate-950 border-slate-800 text-slate-100"
+                              : "bg-slate-50 border-slate-300 text-slate-900"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => saveDeliveryAddress(building, floor, roomNumber)}
+                      disabled={isBlockDisabled}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isBlockDisabled ? "Delivery Unavailable for Selected Block" : "Save Delivery Location"}
+                    </button>
+                  </>
+                );
+              })()}
             </motion.div>
           </div>
         )}
@@ -4091,6 +4192,80 @@ export default function StudentPortal() {
           )}
         </button>
       </div>
+
+      {/* Live Camera Scanner Overlay Modal */}
+      <AnimatePresence>
+        {showCamera && (
+          <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={stopCamera}
+              className="absolute inset-0 bg-slate-950/85 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 z-10 text-center"
+            >
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                  <Camera className="w-5 h-5 text-orange-500" />
+                  <span>Live College ID Camera Scanner</span>
+                </h3>
+                <button
+                  onClick={stopCamera}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-4 border-2 border-dashed border-orange-500/70 rounded-xl pointer-events-none flex items-center justify-center">
+                  <span className="text-[11px] font-bold text-orange-400 bg-slate-950/90 px-3 py-1 rounded-full border border-orange-500/30">
+                    Position College ID inside frame
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="w-1/3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  disabled={ocrLoading}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-lg transition disabled:opacity-50"
+                >
+                  {ocrLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Extracting Text OCR...</span>
+                    </>
+                  ) : (
+                    <span>📸 Take Photo & Process OCR</span>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

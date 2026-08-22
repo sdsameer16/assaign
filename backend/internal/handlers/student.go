@@ -105,8 +105,8 @@ func (h *HandlerContext) StudentRegister(w http.ResponseWriter, r *http.Request)
 		doc.ConfidenceLevel = models.ConfidenceLevelLow
 	}
 
-	if doc.NameSimilarityScore < 60.0 {
-		RespondError(w, http.StatusBadRequest, "Please scan your ID card properly, by cleaning the lens.")
+	if doc.NameSimilarityScore < 90.0 {
+		RespondError(w, http.StatusBadRequest, "ID card scan match score must be 90% or higher. Please scan your ID card in clear lighting.")
 		return
 	}
 

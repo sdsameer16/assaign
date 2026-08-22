@@ -1,4 +1,4 @@
-import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintSides, TrackingAd } from "@campusbites/types";
+import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintSides, TrackingAd, HostelBlock } from "@campusbites/types";
 
 const getApiBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -61,10 +61,17 @@ async function apiRequest<T>(
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    throw new Error(
+      `Backend connection offline or unreachable at ${API_BASE_URL}`
+    );
+  }
 
   if (response.status === 401) {
     if (token || isHandling401) {
@@ -257,6 +264,8 @@ export const studentApi = {
       method: "POST",
       body: JSON.stringify({ rating, review }),
     }),
+
+  getHostelBlocks: () => apiRequest<HostelBlock[]>("/hostel-blocks"),
 };
 
 

@@ -25,6 +25,15 @@ export const BUILDINGS = [
 ] as const;
 export type Building = (typeof BUILDINGS)[number];
 
+export interface HostelBlock {
+  id: string;
+  name: string;
+  is_enabled: boolean;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 
 // Student Interface
 export interface Student {

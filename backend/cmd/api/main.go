@@ -206,6 +206,14 @@ func runMigrations(db *database.DB) {
 			image_url TEXT NOT NULL DEFAULT '',
 			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS hostel_blocks (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name VARCHAR(100) UNIQUE NOT NULL,
+			is_enabled BOOLEAN DEFAULT TRUE,
+			display_order INT DEFAULT 0,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 	for _, m := range migrations {
 		if _, err := db.Pool.Exec(ctx, m); err != nil {
@@ -310,5 +318,21 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 		} else {
 			log.Println("Seeded default tracking_ad row.")
 		}
+	}
+
+	// 5. Seed initial hostel blocks if empty
+	var blockCount int
+	err = db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM hostel_blocks`).Scan(&blockCount)
+	if err == nil && blockCount == 0 {
+		initialBlocks := []string{"N Block", "A Block", "H Block", "U Block", "Lara", "Pharmacy"}
+		for i, blockName := range initialBlocks {
+			_, err = db.Pool.Exec(ctx, `
+				INSERT INTO hostel_blocks (name, is_enabled, display_order)
+				VALUES ($1, true, $2)
+				ON CONFLICT (name) DO NOTHING`,
+				blockName, i+1,
+			)
+		}
+		log.Println("Seeded default hostel blocks successfully.")
 	}
 }

@@ -10,6 +10,7 @@ import {
   AuditLog,
   PrintPricing,
   TrackingAd,
+  HostelBlock,
 } from "@campusbites/types";
 
 const getApiBaseUrl = (): string => {
@@ -69,10 +70,17 @@ async function apiRequest<T>(
     ...options.headers,
   };
 
-  const response = await fetch(`${baseUrl}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    throw new Error(
+      `Backend connection offline or unreachable at ${baseUrl}`
+    );
+  }
 
   if (response.status === 401) {
     if (token || isHandling401) {
@@ -330,6 +338,25 @@ export const adminApi = {
       `/payments/${id}/reconcile`,
       { method: "POST" },
     ),
+
+  // Hostel Blocks / Buildings Management
+  getHostelBlocks: () => apiRequest<HostelBlock[]>("/hostel-blocks"),
+
+  createHostelBlock: (data: { name: string; is_enabled?: boolean; display_order?: number }) =>
+    apiRequest<HostelBlock>("/hostel-blocks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  toggleHostelBlock: (id: string) =>
+    apiRequest<HostelBlock>(`/hostel-blocks/${id}/toggle`, {
+      method: "PATCH",
+    }),
+
+  deleteHostelBlock: (id: string) =>
+    apiRequest<{ message: string }>(`/hostel-blocks/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface PaymentHealthRecord {

@@ -46,6 +46,16 @@ const (
 	AdminRoleStaff      = "staff"
 )
 
+// HostelBlock model mapping to hostel_blocks table
+type HostelBlock struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	IsEnabled    bool      `json:"is_enabled"`
+	DisplayOrder int       `json:"display_order"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 // Student model mapping to students table
 type Student struct {
 	ID                 string    `json:"id"`

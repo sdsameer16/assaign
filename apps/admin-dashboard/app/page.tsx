@@ -34,6 +34,7 @@ import {
   Calendar,
   GripVertical,
   Trash,
+  Trash2,
   FileText,
   Filter,
   Download,
@@ -78,6 +79,7 @@ export default function AdminDashboard() {
     | "products"
     | "menu-schedule"
     | "slots"
+    | "hostel-blocks"
     | "delivery-config"
     | "print-pricing"
     | "tracking-ad"
@@ -137,6 +139,10 @@ export default function AdminDashboard() {
   const [partners, setPartners] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [hostelBlocks, setHostelBlocks] = useState<any[]>([]);
+  const [newBlockName, setNewBlockName] = useState("");
+  const [newBlockOrder, setNewBlockOrder] = useState("0");
+  const [blockSaving, setBlockSaving] = useState(false);
 
   // Forms and Modals
   const [newProductName, setNewProductName] = useState("");
@@ -272,7 +278,7 @@ export default function AdminDashboard() {
       const data = await adminApi.getSummary();
       setSummary(data);
     } catch (e) {
-      console.error(e);
+      console.warn("Backend server connection polling (summary):", e);
     }
   };
 
@@ -282,7 +288,7 @@ export default function AdminDashboard() {
       const validOrders = (data || []).filter((o: any) => o.payment_status === "paid" || o.payment_status === "reconciliation_required");
       setOrders(validOrders);
     } catch (e) {
-      console.error(e);
+      console.warn("Backend server connection polling (orders):", e);
     }
   };
 
@@ -294,6 +300,57 @@ export default function AdminDashboard() {
       setMenuSchedules(data || []);
     } catch (e) {
       console.error("Failed to load menu schedules:", e);
+    }
+  };
+
+  const fetchHostelBlocks = async () => {
+    try {
+      const data = await adminApi.getHostelBlocks();
+      setHostelBlocks(data || []);
+    } catch (e) {
+      console.warn("Hostel blocks endpoint not active yet on backend:", e);
+    }
+  };
+
+  const handleCreateHostelBlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBlockName.trim()) return;
+    try {
+      setBlockSaving(true);
+      await adminApi.createHostelBlock({
+        name: newBlockName.trim(),
+        is_enabled: true,
+        display_order: parseInt(newBlockOrder, 10) || 0,
+      });
+      setNewBlockName("");
+      setNewBlockOrder("0");
+      showToast("Hostel block created successfully!");
+      fetchHostelBlocks();
+    } catch (err: any) {
+      showToast("Failed to create hostel block: " + err.message, "error");
+    } finally {
+      setBlockSaving(false);
+    }
+  };
+
+  const handleToggleHostelBlock = async (id: string) => {
+    try {
+      await adminApi.toggleHostelBlock(id);
+      showToast("Block status updated!");
+      fetchHostelBlocks();
+    } catch (err: any) {
+      showToast("Failed to toggle block status: " + err.message, "error");
+    }
+  };
+
+  const handleDeleteHostelBlock = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete hostel block "${name}"?`)) return;
+    try {
+      await adminApi.deleteHostelBlock(id);
+      showToast("Hostel block deleted!");
+      fetchHostelBlocks();
+    } catch (err: any) {
+      showToast("Failed to delete block: " + err.message, "error");
     }
   };
 
@@ -316,6 +373,8 @@ export default function AdminDashboard() {
       } catch (e) {
         console.error("Failed to load delivery slots:", e);
       }
+
+      await fetchHostelBlocks();
 
 
       try {
@@ -1140,13 +1199,7 @@ export default function AdminDashboard() {
     return matchesSearch && matchesStatus && matchesDate && matchesBuilding && matchesSlot && matchesCourier;
   });
 
-  const pickupOrders = orders.filter(
-    (o) =>
-      o.not_available_flag &&
-      o.status !== "delivered" &&
-      o.status !== "cancelled" &&
-      o.status !== "out_of_stock",
-  );
+
 
   return (
     <div className="flex-1 bg-slate-950 text-slate-100 min-h-screen font-sans flex">
@@ -1264,6 +1317,7 @@ export default function AdminDashboard() {
                 { id: "products", label: "Product Catalog", icon: Layers },
                 { id: "menu-schedule", label: "Menu Schedule", icon: Calendar },
                 { id: "slots", label: "Delivery Slots", icon: Clock },
+                { id: "hostel-blocks", label: "Hostel Blocks", icon: Building2 },
 
                 { id: "delivery-config", label: "Delivery Settings", icon: Sparkles },
                 { id: "print-pricing", label: "Print Pricing", icon: Printer },
@@ -1333,6 +1387,7 @@ export default function AdminDashboard() {
                       { id: "products", label: "Product Catalog", icon: Layers },
                       { id: "menu-schedule", label: "Menu Schedule", icon: Calendar },
                       { id: "slots", label: "Delivery Slots", icon: Clock },
+                      { id: "hostel-blocks", label: "Hostel Blocks", icon: Building2 },
                       { id: "delivery-config", label: "Delivery Settings", icon: Sparkles },
                       { id: "print-pricing", label: "Print Pricing", icon: Printer },
                       { id: "tracking-ad", label: "Tracking Ad", icon: ImageIcon },
@@ -2522,6 +2577,137 @@ export default function AdminDashboard() {
                       )}
                     </button>
                   </form>
+                </div>
+              )}
+
+              {/* Tab: Hostel Blocks / Building Management */}
+              {activeTab === "hostel-blocks" && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+                    <div>
+                      <h3 className="text-xl font-black text-white flex items-center space-x-2">
+                        <Building2 className="w-5 h-5 text-indigo-400" />
+                        <span>Hostel Blocks & Buildings Management</span>
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Add campus buildings/hostels and toggle delivery service availability. Disabled blocks display an instant warning in Student Portal.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Add New Block Form */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wider">Add New Hostel Block / Building</h4>
+                    <form onSubmit={handleCreateHostelBlock} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Block / Building Name</label>
+                        <input
+                          type="text"
+                          value={newBlockName}
+                          onChange={(e) => setNewBlockName(e.target.value)}
+                          placeholder="e.g. BH-1, Girls Hostel 2, MBA Block"
+                          required
+                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl text-xs outline-none text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Display Sort Order</label>
+                        <input
+                          type="number"
+                          value={newBlockOrder}
+                          onChange={(e) => setNewBlockOrder(e.target.value)}
+                          placeholder="0"
+                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl text-xs outline-none text-white font-bold"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={blockSaving}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center space-x-2 transition disabled:opacity-50"
+                      >
+                        {blockSaving ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            <span>Add Hostel Block</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Hostel Blocks Management Table */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
+                    <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Configured Hostel Blocks ({hostelBlocks.length})</h4>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-850 bg-slate-950 text-slate-400 uppercase font-black tracking-wider text-[9px]">
+                            <th className="p-4">Block / Building Name</th>
+                            <th className="p-4 text-center">Sort Order</th>
+                            <th className="p-4 text-center">Service Status</th>
+                            <th className="p-4 text-center">Toggle Service</th>
+                            <th className="p-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hostelBlocks.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="p-8 text-center text-slate-500 font-semibold">
+                                No hostel blocks configured yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            hostelBlocks.map((block) => (
+                              <tr key={block.id} className="border-b border-slate-850 hover:bg-slate-850/30 transition">
+                                <td className="p-4 font-bold text-white text-sm">
+                                  {block.name}
+                                </td>
+                                <td className="p-4 text-center font-mono font-bold text-slate-300">
+                                  {block.display_order}
+                                </td>
+                                <td className="p-4 text-center">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                      block.is_enabled
+                                        ? "bg-emerald-950 text-emerald-400 border border-emerald-800/40"
+                                        : "bg-red-950 text-red-400 border border-red-800/40"
+                                    }`}
+                                  >
+                                    {block.is_enabled ? "Active Delivery" : "Disabled (Off-limits)"}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-center">
+                                  <button
+                                    onClick={() => handleToggleHostelBlock(block.id)}
+                                    className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition border ${
+                                      block.is_enabled
+                                        ? "bg-red-950/40 text-red-300 border-red-800/50 hover:bg-red-900/50"
+                                        : "bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/50"
+                                    }`}
+                                  >
+                                    {block.is_enabled ? "Disable Service" : "Enable Service"}
+                                  </button>
+                                </td>
+                                <td className="p-4 text-right">
+                                  <button
+                                    onClick={() => handleDeleteHostelBlock(block.id, block.name)}
+                                    className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-red-950/30 transition"
+                                    title="Delete Block"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
 

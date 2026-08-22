@@ -36,6 +36,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 			r.Get("/print-pricing", hCtx.GetPrintPricing)
 			r.Get("/tracking-ad", hCtx.GetTrackingAd)
 			r.Get("/menu-schedules", hCtx.GetActiveMenuSchedules)
+			r.Get("/hostel-blocks", hCtx.ListHostelBlocks)
 
 			// Authenticated Student Endpoints
 
@@ -104,6 +105,11 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Post("/send-notification", hCtx.AdminSendNotification)
 				r.Get("/payments/health", hCtx.AdminGetPaymentHealth)
 				r.Post("/payments/{id}/reconcile", hCtx.AdminReconcilePayment)
+				r.Get("/hostel-blocks", hCtx.ListHostelBlocks)
+				r.Post("/hostel-blocks", hCtx.CreateHostelBlock)
+				r.Put("/hostel-blocks/{id}", hCtx.UpdateHostelBlock)
+				r.Patch("/hostel-blocks/{id}/toggle", hCtx.ToggleHostelBlock)
+				r.Delete("/hostel-blocks/{id}", hCtx.DeleteHostelBlock)
 			})
 
 
