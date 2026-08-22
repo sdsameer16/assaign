@@ -1,21 +1,29 @@
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
 
-/** Upload an advertisement image to Cloudinary (unsigned preset). */
-export async function uploadAdImage(file: File): Promise<string> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-  if (!cloudName || !uploadPreset) {
-    console.error("UPLOAD ERROR: Cloudinary credentials missing", { cloudName: Boolean(cloudName), uploadPreset: Boolean(uploadPreset) });
-    throw new Error("Cloudinary configuration missing (NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME or NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET not set).");
+const getBackendApiUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.trim().replace(/\/+$/, "");
   }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:8080/api/admin";
+    }
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    return `${protocol}//${window.location.host}/api/admin`;
+  }
+  return "http://localhost:8080/api/admin";
+};
 
+/** Upload an advertisement image via CampusBites Backend API. */
+export async function uploadAdImage(file: File): Promise<string> {
   if (!file || file.size === 0) {
     throw new Error("Selected image file is 0 bytes (empty file).");
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`Image size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds maximum allowed size of 15MB.`);
+    throw new Error("Image size exceeds maximum allowed size of 15MB.");
   }
 
   const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -23,13 +31,12 @@ export async function uploadAdImage(file: File): Promise<string> {
     throw new Error("Please upload a JPG, PNG, or WEBP image.");
   }
 
-  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+  const uploadUrl = `${getBackendApiUrl()}/upload`;
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 35000);
+  const timeoutId = setTimeout(() => controller.abort(), 40000);
 
   let response: Response;
   try {
@@ -39,32 +46,37 @@ export async function uploadAdImage(file: File): Promise<string> {
       signal: controller.signal,
     });
   } catch (err: any) {
-    console.error("UPLOAD ERROR:", err);
-    console.error("UPLOAD URL:", uploadUrl);
-    console.error("FILE DETAILS:", { name: file.name, size: file.size, type: file.type });
-
-    if (err.name === "AbortError") {
-      throw new Error(`Ad image upload timed out after 35 seconds. Target URL: ${uploadUrl}`);
-    }
-    throw new Error(`Ad image upload failed at browser level (${err.name || "TypeError"}: ${err.message || "Failed to fetch"}). URL: ${uploadUrl}`);
+    console.error("[Admin Upload Transport Error]", {
+      url: uploadUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      error: err?.message || err,
+    });
+    throw new Error("Unable to connect to CampusBites admin server. Please check your connection.");
   } finally {
     clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
     const errRes = await response.json().catch(() => ({}));
-    const errorMessage = errRes.error?.message || response.statusText || "Unknown storage error";
-    console.error("UPLOAD HTTP ERROR:", {
+    const errorMsg = errRes.error || response.statusText;
+    console.error("[Admin Upload HTTP Error]", {
       url: uploadUrl,
       status: response.status,
-      cloudError: errRes.error,
+      error: errorMsg,
     });
-    throw new Error(`Storage upload failed: HTTP ${response.status} - ${errorMessage}`);
+    if (response.status === 413) {
+      throw new Error("File is too large.");
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Upload authorization failed.");
+    }
+    throw new Error("CampusBites could not process the image. Please try again.");
   }
 
   const result = await response.json();
-  if (!result.secure_url) {
-    throw new Error(result.error?.message || "Storage upload succeeded but returned no secure URL.");
+  if (!result.url) {
+    throw new Error("CampusBites could not process the image. Please try again.");
   }
-  return result.secure_url as string;
+  return result.url as string;
 }

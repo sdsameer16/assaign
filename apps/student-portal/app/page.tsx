@@ -103,7 +103,7 @@ const AnimatedPrinterIcon = ({ className }: { className?: string }) => {
 import {
   uploadPrintFile,
   uploadImageDataUrl,
-  isAcceptedPrintFile,
+  validatePrintingFile,
 } from "../lib/cloudinary";
 import {
   countPrintPages,
@@ -1146,9 +1146,10 @@ export default function StudentPortal() {
     if (files.length === 0) return;
 
     for (const file of files) {
-      if (!isAcceptedPrintFile(file.name)) {
+      const validation = validatePrintingFile(file);
+      if (!validation.valid) {
         alert(
-          `Unsupported file: ${file.name}. Accepted: pdf, doc, docx, xls, xlsx, jpeg, jpg, png`
+          `${validation.title || "File format not supported"}\n\n${validation.message}`
         );
         return;
       }
@@ -3499,12 +3500,12 @@ export default function StudentPortal() {
                     ? "bg-indigo-950/40 border-indigo-800/60"
                     : "bg-indigo-50/70 border-indigo-200"
                 }`}>
-                  <p className={`font-bold ${theme === "dark" ? "text-indigo-300" : "text-indigo-700"}`}>Upload PDF or Document File</p>
-                  <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Accepted: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</p>
+                  <p className={`font-bold ${theme === "dark" ? "text-indigo-300" : "text-indigo-700"}`}>Upload PDF or Photo File</p>
+                  <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Accepted: PDF, JPG, JPEG, PNG, WEBP</p>
                   <input
                     type="file"
                     multiple
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
                     onChange={handlePrintFilesSelected}
                     className={`block w-full text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer ${
                       theme === "dark" ? "text-slate-400" : "text-slate-600"

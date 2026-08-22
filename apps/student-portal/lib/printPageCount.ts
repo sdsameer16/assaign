@@ -8,7 +8,7 @@ export type PageCountResult = {
   source: PageCountSource;
 };
 
-const IMAGE_EXTS = new Set(["jpeg", "jpg", "png"]);
+const IMAGE_EXTS = new Set(["jpeg", "jpg", "png", "webp"]);
 const OFFICE_EXTS = new Set(["doc", "docx", "xls", "xlsx"]);
 
 function billOffice(estimated: number): PageCountResult {

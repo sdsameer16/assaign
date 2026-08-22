@@ -1,21 +1,26 @@
 package services
 
 import (
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var cloudinaryVersionRE = regexp.MustCompile(`^v\d+$`)
 
-// CloudinaryService deletes uploaded print assets after delivery.
+// CloudinaryService handles server-side uploads and post-delivery deletion of Cloudinary assets.
 type CloudinaryService struct {
 	CloudName string
 	APIKey    string
@@ -27,15 +32,101 @@ func NewCloudinaryService(cloudName, apiKey, apiSecret string) *CloudinaryServic
 	cloudName = strings.TrimSpace(cloudName)
 	apiKey = strings.TrimSpace(apiKey)
 	apiSecret = strings.TrimSpace(apiSecret)
-	if cloudName == "" || apiKey == "" || apiSecret == "" {
+	if cloudName == "" {
 		return nil
 	}
 	return &CloudinaryService{
 		CloudName: cloudName,
 		APIKey:    apiKey,
 		APISecret: apiSecret,
-		client:    &http.Client{Timeout: 20 * time.Second},
+		client:    &http.Client{Timeout: 35 * time.Second},
 	}
+}
+
+// UploadFile uploads a file reader to Cloudinary server-side.
+func (cs *CloudinaryService) UploadFile(fileReader io.Reader, fileName string, resourceType string) (secureURL string, publicID string, err error) {
+	if cs == nil || cs.CloudName == "" {
+		return "", "", fmt.Errorf("cloudinary service not configured on server")
+	}
+
+	if resourceType != "image" && resourceType != "raw" && resourceType != "auto" {
+		resourceType = "auto"
+	}
+
+	endpoint := fmt.Sprintf("https://api.cloudinary.com/v1_1/%s/%s/upload", cs.CloudName, resourceType)
+
+	bodyBuf := &bytes.Buffer{}
+	mw := multipart.NewWriter(bodyBuf)
+
+	fileWriter, err := mw.CreateFormFile("file", fileName)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create multipart file field: %w", err)
+	}
+	if _, err := io.Copy(fileWriter, fileReader); err != nil {
+		return "", "", fmt.Errorf("failed to copy file payload: %w", err)
+	}
+
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+
+	if cs.APIKey != "" && cs.APISecret != "" {
+		mw.WriteField("api_key", cs.APIKey)
+		mw.WriteField("timestamp", timestamp)
+
+		stringToSign := fmt.Sprintf("timestamp=%s%s", timestamp, cs.APISecret)
+		h := sha1.New()
+		h.Write([]byte(stringToSign))
+		signature := hex.EncodeToString(h.Sum(nil))
+
+		mw.WriteField("signature", signature)
+	} else {
+		mw.WriteField("upload_preset", "CmpsBites")
+	}
+
+	if err := mw.Close(); err != nil {
+		return "", "", fmt.Errorf("failed to construct multipart request body: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, bodyBuf)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create http request: %w", err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := cs.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("cloudinary request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read response from storage provider: %w", err)
+	}
+
+	var result struct {
+		SecureURL string `json:"secure_url"`
+		PublicID  string `json:"public_id"`
+		Error     struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", "", fmt.Errorf("invalid response format from storage provider (%d)", resp.StatusCode)
+	}
+
+	if resp.StatusCode >= 300 {
+		errMsg := result.Error.Message
+		if errMsg == "" {
+			errMsg = string(respBytes)
+		}
+		return "", "", fmt.Errorf("cloudinary storage rejection (%d): %s", resp.StatusCode, errMsg)
+	}
+
+	if result.SecureURL == "" {
+		return "", "", fmt.Errorf("cloudinary upload succeeded but secure_url was empty")
+	}
+
+	return result.SecureURL, result.PublicID, nil
 }
 
 // DeleteByURL destroys a Cloudinary asset identified by its delivery URL.

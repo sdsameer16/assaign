@@ -1,21 +1,81 @@
 const ACCEPTED_PRINT_EXTENSIONS = [
   "pdf",
-  "doc",
-  "docx",
-  "xls",
-  "xlsx",
   "jpeg",
   "jpg",
   "png",
+  "webp",
 ] as const;
 
-const IMAGE_EXTENSIONS = new Set(["jpeg", "jpg", "png"]);
+const IMAGE_EXTENSIONS = new Set(["jpeg", "jpg", "png", "webp"]);
 
 export type AcceptedPrintExtension = (typeof ACCEPTED_PRINT_EXTENSIONS)[number];
 
 export function getFileExtension(fileName: string): string {
   const parts = fileName.toLowerCase().split(".");
   return parts.length > 1 ? parts[parts.length - 1] : "";
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  title?: string;
+  message?: string;
+}
+
+export function validatePrintingFile(file: File): ValidationResult {
+  if (!file || file.size === 0) {
+    return {
+      valid: false,
+      title: "Empty file",
+      message: "Please select a valid PDF or photo file.",
+    };
+  }
+
+  const ext = getFileExtension(file.name);
+  const mimeType = (file.type || "").toLowerCase();
+
+  // Unsupported document formats guidance
+  if (ext === "doc" || ext === "docx") {
+    return {
+      valid: false,
+      title: "Word document not supported",
+      message:
+        "Please convert your Word document to PDF before uploading. PDF and photo files are accepted for printing.",
+    };
+  }
+
+  if (ext === "xls" || ext === "xlsx" || ext === "csv" || ext === "ods") {
+    return {
+      valid: false,
+      title: "Excel document not supported",
+      message:
+        "Please convert your Excel document to PDF before uploading. PDF and photo files are accepted for printing.",
+    };
+  }
+
+  if (ext === "ppt" || ext === "pptx" || ext === "odp") {
+    return {
+      valid: false,
+      title: "PowerPoint document not supported",
+      message:
+        "Please convert your document to PDF before uploading. PDF and photo files are accepted for printing.",
+    };
+  }
+
+  const allowedExts = new Set(["pdf", "jpg", "jpeg", "png", "webp"]);
+  const isAllowedExt = allowedExts.has(ext);
+  const isPdfMime = mimeType === "application/pdf";
+  const isImageMime = mimeType.startsWith("image/");
+
+  if (!isAllowedExt && !isPdfMime && !isImageMime) {
+    return {
+      valid: false,
+      title: "File format not supported",
+      message:
+        "Please convert your document to PDF before uploading. PDF and photo files are accepted for printing.",
+    };
+  }
+
+  return { valid: true };
 }
 
 export function isAcceptedPrintFile(fileName: string): boolean {
@@ -47,43 +107,43 @@ export function cloudinaryDownloadUrl(url: string, _fileName?: string): string {
 
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
 
-/** Upload a document/image to Cloudinary (raw for docs, image for photos). */
+const getBackendApiUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:8080/api/student";
+    }
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    return `${protocol}//${window.location.host}/api/student`;
+  }
+  return "http://localhost:8080/api/student";
+};
+
+/** Upload a document/image via CampusBites Backend API to Cloudinary. */
 export async function uploadPrintFile(file: File): Promise<{
   url: string;
   fileName: string;
   fileType: string;
 }> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-  if (!cloudName || !uploadPreset) {
-    console.error("UPLOAD ERROR: Cloudinary credentials missing", { cloudName: Boolean(cloudName), uploadPreset: Boolean(uploadPreset) });
-    throw new Error("Cloudinary configuration missing (NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME or NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET not set).");
-  }
-
-  if (!file || file.size === 0) {
-    throw new Error("Selected file is 0 bytes (empty file).");
+  const validation = validatePrintingFile(file);
+  if (!validation.valid) {
+    throw new Error(validation.message || "Unsupported file format.");
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds maximum allowed upload size of 15MB.`);
+    throw new Error("File is too large.");
   }
 
-  if (!isAcceptedPrintFile(file.name)) {
-    throw new Error(
-      "Unsupported file type. Accepted formats: pdf, doc, docx, xls, xlsx, jpeg, jpg, png",
-    );
-  }
-
-  const resourceType = resourceTypeForPrintFile(file.name);
-  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
-
+  const uploadUrl = `${getBackendApiUrl()}/upload`;
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 35000);
+  const timeoutId = setTimeout(() => controller.abort(), 40000);
 
   let response: Response;
   try {
@@ -93,99 +153,62 @@ export async function uploadPrintFile(file: File): Promise<{
       signal: controller.signal,
     });
   } catch (err: any) {
-    console.error("UPLOAD ERROR:", err);
-    console.error("UPLOAD URL:", uploadUrl);
-    console.error("FILE DETAILS:", { name: file.name, size: file.size, type: file.type });
-
-    if (err.name === "AbortError") {
-      throw new Error(`Upload request timed out after 35 seconds. Target URL: ${uploadUrl}`);
-    }
-    throw new Error(`Upload request failed at browser/transport level (${err.name || "TypeError"}: ${err.message || "Failed to fetch"}). URL: ${uploadUrl}`);
+    console.error("[Backend Upload Transport Error]", {
+      url: uploadUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      error: err?.message || err,
+    });
+    throw new Error("Unable to connect to CampusBites. Please check your connection and try again.");
   } finally {
     clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
     const errRes = await response.json().catch(() => ({}));
-    const errorMessage = errRes.error?.message || response.statusText || "Unknown storage error";
-    console.error("UPLOAD HTTP ERROR:", {
+    const errorMsg = errRes.error || response.statusText;
+    console.error("[Backend Upload HTTP Error]", {
       url: uploadUrl,
       status: response.status,
       statusText: response.statusText,
-      cloudError: errRes.error,
+      error: errorMsg,
       file: { name: file.name, size: file.size, type: file.type },
     });
-    throw new Error(`Storage upload failed: HTTP ${response.status} - ${errorMessage}`);
+
+    if (response.status === 413) {
+      throw new Error("File is too large.");
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Upload authorization failed.");
+    }
+    if (response.status === 400) {
+      throw new Error(errorMsg || "Invalid file payload.");
+    }
+    throw new Error("CampusBites could not process the file. Please try again.");
   }
 
   const result = await response.json();
-  if (!result.secure_url) {
-    throw new Error(result.error?.message || "Storage upload succeeded but returned no secure URL.");
+  if (!result.url) {
+    throw new Error("CampusBites could not process the file. Please try again.");
   }
 
   return {
-    url: result.secure_url as string,
+    url: result.url as string,
     fileName: file.name,
     fileType: getFileExtension(file.name),
   };
 }
 
-/** Upload an image data URL (used for ID card capture). */
+/** Upload an image data URL (used for ID card capture) via CampusBites Backend. */
 export async function uploadImageDataUrl(dataUrl: string): Promise<string> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-  if (!cloudName || !uploadPreset) {
-    console.error("UPLOAD ERROR: Cloudinary credentials missing", { cloudName: Boolean(cloudName), uploadPreset: Boolean(uploadPreset) });
-    throw new Error("Cloudinary configuration missing in environment variables.");
-  }
-
   if (!dataUrl || !dataUrl.startsWith("data:image/")) {
     throw new Error("Invalid image capture data format.");
   }
 
-  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
-  const formData = new FormData();
-  formData.append("file", dataUrl);
-  formData.append("upload_preset", uploadPreset);
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const file = new File([blob], "id_card_capture.jpg", { type: "image/jpeg" });
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-  let response: Response;
-  try {
-    response = await fetch(uploadUrl, {
-      method: "POST",
-      body: formData,
-      signal: controller.signal,
-    });
-  } catch (err: any) {
-    console.error("UPLOAD ERROR:", err);
-    console.error("UPLOAD URL:", uploadUrl);
-    console.error("DATA URL LENGTH:", dataUrl.length);
-
-    if (err.name === "AbortError") {
-      throw new Error(`ID image upload timed out after 35 seconds. Target URL: ${uploadUrl}`);
-    }
-    throw new Error(`ID image upload failed at browser level (${err.name || "TypeError"}: ${err.message || "Failed to fetch"}). URL: ${uploadUrl}`);
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) {
-    const errRes = await response.json().catch(() => ({}));
-    const errorMessage = errRes.error?.message || response.statusText || "Unknown storage error";
-    console.error("UPLOAD HTTP ERROR:", {
-      url: uploadUrl,
-      status: response.status,
-      cloudError: errRes.error,
-    });
-    throw new Error(`Storage upload failed: HTTP ${response.status} - ${errorMessage}`);
-  }
-
-  const result = await response.json();
-  if (!result.secure_url) {
-    throw new Error(result.error?.message || "Storage upload succeeded but returned no file URL.");
-  }
-  return result.secure_url as string;
+  const uploadResult = await uploadPrintFile(file);
+  return uploadResult.url;
 }

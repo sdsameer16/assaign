@@ -26,6 +26,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 
 		// 1. Student Portal API Group
 		r.Route("/student", func(r chi.Router) {
+			r.Post("/upload", hCtx.StudentUploadFile)
 			r.Post("/register", hCtx.StudentRegister)
 			r.Post("/login", hCtx.StudentLogin)
 			r.Post("/ocr/preview", hCtx.StudentOCRPreview)
@@ -70,6 +71,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Use(customMiddleware.AuthMiddleware(hCtx.AuthService))
 				r.Use(customMiddleware.RequireRole("admin"))
 
+				r.Post("/upload", hCtx.StudentUploadFile)
 				r.Get("/dashboard/summary", hCtx.GetDashboardSummary)
 				r.Get("/categories", hCtx.ListCategories)
 				r.Post("/categories", hCtx.CreateCategory)
