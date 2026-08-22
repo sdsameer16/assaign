@@ -8,20 +8,12 @@ const getApiBaseUrl = (): string => {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    // Only auto-substitute for local LAN IPs (e.g. 192.168.x.x) during local testing
-    if (
-      host !== "localhost" &&
-      host !== "127.0.0.1" &&
-      !host.endsWith(".netlify.app") &&
-      !host.endsWith(".onrender.com") &&
-      !host.endsWith(".vercel.app") &&
-      !host.endsWith(".pages.dev")
-    ) {
-      return `http://${host}:8080/api/student`;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:8080/api/student";
     }
   }
 
-  return "http://localhost:8080/api/student";
+  return "https://invalidurl.onrender.com/api/student";
 };
 
 const API_BASE_URL = getApiBaseUrl();

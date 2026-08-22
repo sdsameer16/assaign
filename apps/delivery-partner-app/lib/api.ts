@@ -8,19 +8,12 @@ const getApiBaseUrl = (): string => {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    if (
-      host !== "localhost" &&
-      host !== "127.0.0.1" &&
-      !host.endsWith(".netlify.app") &&
-      !host.endsWith(".onrender.com") &&
-      !host.endsWith(".vercel.app") &&
-      !host.endsWith(".pages.dev")
-    ) {
-      return `http://${host}:8080/api/delivery`;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:8080/api/delivery";
     }
   }
 
-  return "http://localhost:8080/api/delivery";
+  return "https://invalidurl.onrender.com/api/delivery";
 };
 
 const API_BASE_URL = getApiBaseUrl();
