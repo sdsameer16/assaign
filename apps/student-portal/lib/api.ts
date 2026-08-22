@@ -2,6 +2,11 @@ import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintS
 
 const getApiBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/student";
+  if (envUrl.includes("invalidurl")) {
+    console.error(
+      "[CampusBites] CRITICAL CONFIG ERROR: NEXT_PUBLIC_API_URL is configured as 'invalidurl'. Update NEXT_PUBLIC_API_URL in your Render/Vercel dashboard to your deployed Go backend URL.",
+    );
+  }
   if (
     typeof window !== "undefined" &&
     window.location.hostname !== "localhost" &&
