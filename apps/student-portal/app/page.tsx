@@ -1267,50 +1267,118 @@ export default function StudentPortal() {
     );
   };
 
-  // Dynamic Time Greeting
+  // IST Clock & Ticker for Automatic Time Slot Transitions
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000); // Check boundary transition every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const istDate = useMemo(() => {
+    // Convert current time to IST (Asia/Kolkata - UTC+5:30)
+    const utc = currentTime.getTime() + currentTime.getTimezoneOffset() * 60000;
+    return new Date(utc + 5.5 * 3600000);
+  }, [currentTime]);
+
+  const [dbSchedules, setDbSchedules] = useState<MenuSchedule[]>([]);
+
+  useEffect(() => {
+    studentApi
+      .getMenuSchedules()
+      .then((schedules) => setDbSchedules(schedules || []))
+      .catch((err) => console.error("Failed to load db menu schedules:", err));
+  }, []);
+
+  // Evaluates current active Admin schedule using IST time and half-open [start_time, end_time) interval rules
+  const activeSchedule = useMemo(() => {
+    if (!dbSchedules || dbSchedules.length === 0) return null;
+    const currentMins = istDate.getHours() * 60 + istDate.getMinutes();
+
+    return dbSchedules.find((s) => {
+      if (!s.is_enabled) return false;
+      const [sh, sm] = (s.start_time || "00:00").split(":").map((n) => parseInt(n, 10) || 0);
+      const [eh, em] = (s.end_time || "23:59").split(":").map((n) => parseInt(n, 10) || 0);
+      const startMins = sh * 60 + sm;
+      const endMins = eh * 60 + em;
+
+      if (startMins < endMins) {
+        return currentMins >= startMins && currentMins < endMins;
+      } else {
+        // Overnight slot (e.g. 23:00 - 06:00)
+        return currentMins >= startMins || currentMins < endMins;
+      }
+    });
+  }, [dbSchedules, istDate]);
+
+  // Set of Category IDs allowed by the active schedule (null if no enabled schedule is configured)
+  const activeScheduledCategoryIDs = useMemo(() => {
+    if (!activeSchedule || !activeSchedule.categories || activeSchedule.categories.length === 0) {
+      return null;
+    }
+    return new Set(activeSchedule.categories.map((c) => c.category_id));
+  }, [activeSchedule]);
+
   const getTimeGreeting = () => {
-    const hour = new Date().getHours();
-    const name = profile?.short_name || "Student";
-    if (hour >= 5 && hour < 12)
+    const hour = istDate.getHours();
+    const name = isLoggedIn && userProfile ? userProfile.short_name : "Friend";
+
+    if (activeSchedule) {
       return {
-        title: `Good Morning, ${name} 🔆`,
+        title: `${activeSchedule.name}, ${name}! 👋`,
+        period: activeSchedule.name,
+        subtitle: `Configured menu window (${activeSchedule.start_time} - ${activeSchedule.end_time})`,
+        tag: `✨ ${activeSchedule.name}`,
+        buttonText: "Explore Menu",
+        categoryId: "all",
+      };
+    }
+
+    if (hour >= 5 && hour < 11) {
+      return {
+        title: `Good Morning, ${name} 🌅`,
         period: "Morning",
-        subtitle: "Fresh breakfast, idly, parathas & hot coffee delivered to your floor",
-        tag: "🍳 Breakfast Specials",
+        subtitle: "Fresh breakfast, hot coffee, tea & stationery delivered inside campus",
+        tag: "🌅 Morning Specials",
         buttonText: "Order Breakfast",
-        categoryId: "breakfast",
+        categoryId: "all",
       };
-    if (hour >= 12 && hour < 17)
+    }
+    if (hour >= 11 && hour < 15) {
       return {
-        title: `Good Afternoon, ${name} 🌤️`,
+        title: `Good Afternoon, ${name} ☀️`,
         period: "Lunch",
-        subtitle: "Hot biryani, meals, fried rice & thalis ready for corridor delivery",
-        tag: "🍗 Lunch Feast",
+        subtitle: "Hot biryani, thalis, meals & refreshing beverages for lunch breaks",
+        tag: "🍲 Lunch Menu",
         buttonText: "Order Lunch",
-        categoryId: "meals",
+        categoryId: "all",
       };
-    if (hour >= 17 && hour < 22)
+    }
+    if (hour >= 15 && hour < 19) {
       return {
         title: `Good Evening, ${name} 🌆`,
         period: "Evening",
-        subtitle: "Crispy momos, burgers, fries & cold coffee for evening study breaks",
+        subtitle: "Crispy momos, burgers, fries, maggi & cold coffee for study breaks",
         tag: "🍟 Evening Cravings",
         buttonText: "Order Snacks",
-        categoryId: "snacks",
+        categoryId: "all",
       };
+    }
     return {
-      title: `Late night cravings, ${name}? 🌙`,
+      title: `Late Night Cravings, ${name} 🌙`,
       period: "Night",
       subtitle: "Midnight maggi, rolls, snacks & drinks delivered straight to your room",
       tag: "🌙 Late Night Menu",
       buttonText: "Order Late Night",
-      categoryId: "deals",
+      categoryId: "all",
     };
   };
 
   const timeGreeting = getTimeGreeting();
 
-  // Categories & Filtering
+  // Clean Categories from DB
   const cleanCategories = useMemo(() => {
     return categories.filter(
       (c) =>
@@ -1323,39 +1391,60 @@ export default function StudentPortal() {
   const recommendedProductIds = useMemo(() => {
     if (!orderHistory || orderHistory.length === 0) return [];
     const counts: Record<string, number> = {};
-    orderHistory.forEach(order => {
-      order.items?.forEach(item => {
+    orderHistory.forEach((order) => {
+      order.items?.forEach((item) => {
         counts[item.product_id] = (counts[item.product_id] || 0) + item.quantity;
       });
     });
-    // Sort by most ordered
     return Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
   }, [orderHistory]);
 
-  // Main UI Food Category Tabs
+  // Main UI Food Category Tabs (Dynamic & Driven by Admin Menu Schedule)
   const foodCategoryList = useMemo(() => {
-    const list = [
-      { id: "all", name: "All Food", icon: "🍽️" },
-      { id: "breakfast", name: "Breakfast", icon: "🍳" },
-      { id: "biryani", name: "Biryani", icon: "🍗" },
-      { id: "fast food", name: "Fast Food", icon: "🍔" },
-      { id: "meals", name: "Meals", icon: "🍲" },
-      { id: "snacks", name: "Snacks", icon: "🍟" },
-      { id: "beverages", name: "Beverages", icon: "🥤" },
-      { id: "ice creams", name: "Ice Creams", icon: "🍦" },
-      { id: "desserts", name: "Desserts", icon: "🍰" },
-      { id: "combos", name: "Combos", icon: "🍱" },
-      { id: "deals", name: "Student Deals", icon: "🎓" },
+    const list: Array<{ id: string; name: string; icon: string }> = [
+      { id: "all", name: "All Items", icon: "🍽️" },
     ];
+
+    // Filter DB categories allowed by active schedule
+    let allowedCategories = cleanCategories;
+    if (activeScheduledCategoryIDs !== null) {
+      allowedCategories = cleanCategories.filter((c) => activeScheduledCategoryIDs.has(c.id));
+    }
+
+    allowedCategories.forEach((c) => {
+      const catLower = c.name.toLowerCase();
+      let icon = "🍱";
+      if (catLower.includes("stationery") || catLower.includes("paper") || catLower.includes("pen")) icon = "✏️";
+      else if (catLower.includes("rakhi")) icon = "🪔";
+      else if (catLower.includes("snack") || catLower.includes("biscuit") || catLower.includes("chip")) icon = "🍟";
+      else if (catLower.includes("beverage") || catLower.includes("drink") || catLower.includes("tea") || catLower.includes("coffee")) icon = "🥤";
+      else if (catLower.includes("ice cream") || catLower.includes("icecream") || catLower.includes("kulfi")) icon = "🍦";
+      else if (catLower.includes("fast food") || catLower.includes("burger") || catLower.includes("pizza") || catLower.includes("momo")) icon = "🍔";
+      else if (catLower.includes("breakfast") || catLower.includes("tiffin") || catLower.includes("idly") || catLower.includes("dosa")) icon = "🍳";
+      else if (catLower.includes("biryani") || catLower.includes("rice")) icon = "🍗";
+      else if (catLower.includes("meal") || catLower.includes("thali")) icon = "🍲";
+      else if (catLower.includes("dessert") || catLower.includes("sweet") || catLower.includes("cake")) icon = "🍰";
+
+      list.push({ id: c.id, name: c.name, icon });
+    });
+
+    // Permanent Service Tab: Printing
+    list.push({ id: "printing", name: "Printing", icon: "🖨️" });
+
     if (isLoggedIn && recommendedProductIds.length > 0) {
       list.splice(1, 0, { id: "recommended", name: "Recommended", icon: "⭐" });
     }
     return list;
-  }, [isLoggedIn, recommendedProductIds.length]);
+  }, [cleanCategories, activeScheduledCategoryIDs, isLoggedIn, recommendedProductIds.length]);
 
-  // Dynamic Product Filters
+  // Dynamic Product Filters (Filtered by Active Schedule & Search / Category Selection)
   const filteredProducts = useMemo(() => {
     const res = products.filter((p) => {
+      // 1. Check if product category is permitted in current active schedule
+      if (activeScheduledCategoryIDs !== null && !activeScheduledCategoryIDs.has(p.category_id)) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase().trim();
       const catObj = cleanCategories.find((c) => c.id === p.category_id);
       const catName = catObj ? catObj.name.toLowerCase() : "";
@@ -1379,15 +1468,14 @@ export default function StudentPortal() {
       if (selectedCategory === "deals") return p.mrp > p.selling_price || pName.includes("deal");
       if (selectedCategory === "recommended") return recommendedProductIds.includes(p.id);
 
-      return catName.includes(selectedCategory) || pName.includes(selectedCategory);
+      return p.category_id === selectedCategory || catName === selectedCategory.toLowerCase() || catName.includes(selectedCategory.toLowerCase());
     });
 
     if (selectedCategory === "recommended") {
-      // Sort recommended products by frequency
       res.sort((a: Product, b: Product) => recommendedProductIds.indexOf(a.id) - recommendedProductIds.indexOf(b.id));
     }
     return res;
-  }, [products, cleanCategories, selectedCategory, searchQuery, recommendedProductIds]);
+  }, [products, cleanCategories, activeScheduledCategoryIDs, selectedCategory, searchQuery, recommendedProductIds]);
 
   // Popular items with real order statistics where available
   const popularProducts = useMemo(() => {
@@ -1398,35 +1486,6 @@ export default function StudentPortal() {
   const budgetProducts = useMemo(() => {
     return products.filter((p) => p.selling_price <= 50);
   }, [products]);
-
-  const [dbSchedules, setDbSchedules] = useState<MenuSchedule[]>([]);
-
-  useEffect(() => {
-    studentApi
-      .getMenuSchedules()
-      .then((schedules) => setDbSchedules(schedules || []))
-      .catch((err) => console.error("Failed to load db menu schedules:", err));
-  }, []);
-
-  const activeSchedule = useMemo(() => {
-    if (!dbSchedules || dbSchedules.length === 0) return null;
-    const now = new Date();
-    const currentMins = now.getHours() * 60 + now.getMinutes();
-
-    return dbSchedules.find((s) => {
-      if (!s.is_enabled) return false;
-      const [sh, sm] = (s.start_time || "00:00").split(":").map((n) => parseInt(n, 10) || 0);
-      const [eh, em] = (s.end_time || "23:59").split(":").map((n) => parseInt(n, 10) || 0);
-      const startMins = sh * 60 + sm;
-      const endMins = eh * 60 + em;
-
-      if (startMins <= endMins) {
-        return currentMins >= startMins && currentMins < endMins;
-      } else {
-        return currentMins >= startMins || currentMins < endMins;
-      }
-    });
-  }, [dbSchedules]);
 
   // Dynamic Time Highlights (Integrates Admin DB Menu Schedules when configured)
   const timeHighlights = useMemo(() => {
