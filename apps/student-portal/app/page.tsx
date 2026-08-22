@@ -877,10 +877,16 @@ export default function StudentPortal() {
       checkPrivacyStatus();
       fetchOrderHistory();
     } catch (err: any) {
-      if (err.message.includes("not found")) {
+      const msg = (err?.message || "").toLowerCase();
+      if (
+        err?.status === 404 ||
+        msg.includes("not found") ||
+        msg.includes("404") ||
+        msg.includes("register")
+      ) {
         setIsRegistering(true);
       } else {
-        alert(err.message);
+        alert(err.message || "Login failed");
       }
     } finally {
       setIsLoginLoading(false);

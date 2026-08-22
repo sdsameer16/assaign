@@ -5,7 +5,8 @@ const getApiBaseUrl = (): string => {
   if (
     typeof window !== "undefined" &&
     window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1"
+    window.location.hostname !== "127.0.0.1" &&
+    (envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))
   ) {
     return envUrl
       .replace("localhost", window.location.hostname)
@@ -77,9 +78,11 @@ async function apiRequest<T>(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.error || `HTTP error! status: ${response.status}`,
-    );
+    const message =
+      errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
