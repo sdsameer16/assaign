@@ -16,7 +16,7 @@ import {
 const getApiBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl && envUrl.trim() !== "") {
-    return envUrl.trim();
+    return envUrl.trim().replace(/\/+$/, "");
   }
 
   if (typeof window !== "undefined") {
@@ -24,12 +24,12 @@ const getApiBaseUrl = (): string => {
     if (host === "localhost" || host === "127.0.0.1") {
       return "http://localhost:8080/api/admin";
     }
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    return `${protocol}//${window.location.host}/api/admin`;
   }
 
-  return "https://invalidurl.onrender.com/api/admin";
+  return "http://localhost:8080/api/admin";
 };
-
-const API_BASE_URL = getApiBaseUrl();
 
 export const getToken = (): string | null => {
   if (typeof window !== "undefined") {
@@ -70,16 +70,28 @@ async function apiRequest<T>(
     ...options.headers,
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
+
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       headers,
+      signal: options.signal || controller.signal,
     });
   } catch (err: any) {
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out. Please check your network connection.");
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("Network unavailable. Please check your internet connection.");
+    }
     throw new Error(
-      `Backend connection offline or unreachable at ${baseUrl}`
+      `Unable to connect to admin backend server (${baseUrl}). Please verify server is reachable.`
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (response.status === 401) {

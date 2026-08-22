@@ -3,7 +3,7 @@ import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintS
 const getApiBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl && envUrl.trim() !== "") {
-    return envUrl.trim();
+    return envUrl.trim().replace(/\/+$/, "");
   }
 
   if (typeof window !== "undefined") {
@@ -11,12 +11,12 @@ const getApiBaseUrl = (): string => {
     if (host === "localhost" || host === "127.0.0.1") {
       return "http://localhost:8080/api/student";
     }
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    return `${protocol}//${window.location.host}/api/student`;
   }
 
-  return "https://invalidurl.onrender.com/api/student";
+  return "http://localhost:8080/api/student";
 };
-
-const API_BASE_URL = getApiBaseUrl();
 
 // Get token from localStorage
 export const getToken = (): string | null => {
@@ -55,22 +55,35 @@ async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const token = getToken();
+  const baseUrl = getApiBaseUrl();
   const headers = {
     "Content-Type": "application/json",
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
+
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       headers,
+      signal: options.signal || controller.signal,
     });
   } catch (err: any) {
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out. Please check your network connection.");
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("Network unavailable. Please check your internet connection.");
+    }
     throw new Error(
-      `Backend connection offline or unreachable at ${API_BASE_URL}`
+      `Unable to connect to backend server (${baseUrl}). Please verify server is reachable.`
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (response.status === 401) {

@@ -974,13 +974,28 @@ export default function StudentPortal() {
   const capturePhoto = async () => {
     if (!videoRef.current) return;
     try {
+      const vw = videoRef.current.videoWidth || 1280;
+      const vh = videoRef.current.videoHeight || 720;
+      const maxDim = 1280;
+      let width = vw;
+      let height = vh;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
       const canvas = document.createElement("canvas");
-      canvas.width = videoRef.current.videoWidth || 1280;
-      canvas.height = videoRef.current.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg");
+        ctx.drawImage(videoRef.current, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         stopCamera();
         setOcrLoading(true);
 
@@ -989,7 +1004,7 @@ export default function StudentPortal() {
         await runServerOcrPreview(secureUrl);
       }
     } catch (e: any) {
-      alert("Capture failed: " + e.message);
+      alert("Capture/upload failed: " + (e?.message || "Please check your network and try again."));
     } finally {
       setOcrLoading(false);
     }
