@@ -1,23 +1,27 @@
 import { Student, Product, Category, Order, PrintPricing, PrintColorMode, PrintSides, TrackingAd } from "@campusbites/types";
 
 const getApiBaseUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/student";
-  if (envUrl.includes("invalidurl")) {
-    console.error(
-      "[CampusBites] CRITICAL CONFIG ERROR: NEXT_PUBLIC_API_URL is configured as 'invalidurl'. Update NEXT_PUBLIC_API_URL in your Render/Vercel dashboard to your deployed Go backend URL.",
-    );
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.trim();
   }
-  if (
-    typeof window !== "undefined" &&
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1" &&
-    (envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))
-  ) {
-    return envUrl
-      .replace("localhost", window.location.hostname)
-      .replace("127.0.0.1", window.location.hostname);
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    // Only auto-substitute for local LAN IPs (e.g. 192.168.x.x) during local testing
+    if (
+      host !== "localhost" &&
+      host !== "127.0.0.1" &&
+      !host.endsWith(".netlify.app") &&
+      !host.endsWith(".onrender.com") &&
+      !host.endsWith(".vercel.app") &&
+      !host.endsWith(".pages.dev")
+    ) {
+      return `http://${host}:8080/api/student`;
+    }
   }
-  return envUrl;
+
+  return "http://localhost:8080/api/student";
 };
 
 const API_BASE_URL = getApiBaseUrl();

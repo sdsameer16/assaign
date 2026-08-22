@@ -13,18 +13,26 @@ import {
 } from "@campusbites/types";
 
 const getApiBaseUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/admin";
-  if (
-    typeof window !== "undefined" &&
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1" &&
-    (envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))
-  ) {
-    return envUrl
-      .replace("localhost", window.location.hostname)
-      .replace("127.0.0.1", window.location.hostname);
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.trim();
   }
-  return envUrl;
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (
+      host !== "localhost" &&
+      host !== "127.0.0.1" &&
+      !host.endsWith(".netlify.app") &&
+      !host.endsWith(".onrender.com") &&
+      !host.endsWith(".vercel.app") &&
+      !host.endsWith(".pages.dev")
+    ) {
+      return `http://${host}:8080/api/admin`;
+    }
+  }
+
+  return "http://localhost:8080/api/admin";
 };
 
 const API_BASE_URL = getApiBaseUrl();
