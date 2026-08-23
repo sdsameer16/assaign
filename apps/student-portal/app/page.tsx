@@ -1328,10 +1328,16 @@ export default function StudentPortal() {
     const name = isLoggedIn && profile ? profile.short_name : "Friend";
 
     if (activeSchedule) {
+      let defaultSubtitle = "Fresh food, snacks, beverages & essentials delivered inside campus";
+      if (hour >= 5 && hour < 11) defaultSubtitle = "Fresh breakfast, hot coffee, tea & stationery delivered inside campus";
+      else if (hour >= 11 && hour < 15) defaultSubtitle = "Hot biryani, thalis, meals & refreshing beverages for lunch breaks";
+      else if (hour >= 15 && hour < 19) defaultSubtitle = "Crispy momos, burgers, fries, maggi & cold coffee for study breaks";
+      else defaultSubtitle = "Midnight maggi, rolls, snacks & drinks delivered straight to your room";
+
       return {
         title: `${activeSchedule.name}, ${name}! 👋`,
         period: activeSchedule.name,
-        subtitle: `Configured menu window (${activeSchedule.start_time} - ${activeSchedule.end_time})`,
+        subtitle: defaultSubtitle,
         tag: `✨ ${activeSchedule.name}`,
         buttonText: "Explore Menu",
         categoryId: "all",
@@ -2428,31 +2434,6 @@ export default function StudentPortal() {
           <p className={`text-base md:text-lg max-w-2xl mx-auto font-normal leading-relaxed ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`}>
             {timeGreeting.subtitle}
           </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
-            {foodCategoryList
-              .filter((cat) => cat.id !== "all" && cat.id !== "recommended")
-              .map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    if (item.id === "printing") {
-                      setShowPrintingsModal(true);
-                    } else {
-                      setSelectedCategory(item.id);
-                      scrollToMenu();
-                    }
-                  }}
-                  className={`border px-3 py-1 rounded-lg transition font-medium cursor-pointer ${theme === "dark"
-                    ? "bg-slate-800/80 hover:bg-orange-500 hover:text-slate-950 border-slate-700/60 text-slate-300"
-                    : "bg-white hover:bg-orange-500 hover:text-white border-slate-300 text-slate-800 shadow-sm"
-                    }`}
-                >
-                  <span className="mr-1">{item.icon}</span>
-                  <span>{item.name}</span>
-                </button>
-              ))}
-          </div>
 
 
 
