@@ -866,13 +866,7 @@ export default function StudentPortal() {
       setNetworkError(false);
       const data = await studentApi.getMenu();
       setCategories(data.categories || []);
-      setProducts(
-        (data.products || []).filter(
-          (p: Product) =>
-            !p.name.toLowerCase().includes("load test") &&
-            !p.name.toLowerCase().includes("test category")
-        )
-      );
+      setProducts(data.products || []);
     } catch (e) {
       console.error("Failed to load food catalog:", e);
       setNetworkError(true);
@@ -1386,13 +1380,9 @@ export default function StudentPortal() {
 
   const timeGreeting = getTimeGreeting();
 
-  // Clean Categories from DB
+  // Clean Categories from DB catalog
   const cleanCategories = useMemo(() => {
-    return categories.filter(
-      (c) =>
-        !c.name.toLowerCase().includes("load test") &&
-        !c.name.toLowerCase().includes("test category")
-    );
+    return categories;
   }, [categories]);
 
   useEffect(() => {
@@ -1409,12 +1399,7 @@ export default function StudentPortal() {
       if (match) {
         setSelectedCategory(match.id);
       } else {
-        const rakhiMatch = cleanCategories.find((c) => c.name.toLowerCase().includes("rakhi"));
-        if (rakhiMatch) {
-          setSelectedCategory(rakhiMatch.id);
-        } else {
-          setSearchQuery(searchKey);
-        }
+        setSearchQuery(searchKey);
       }
       scrollToMenu();
     };
@@ -1475,43 +1460,44 @@ export default function StudentPortal() {
       const catName = catObj ? catObj.name.toLowerCase() : "";
       const pName = p.name.toLowerCase();
 
-      const q = searchQuery.toLowerCase().trim();
-      let matchesSearch = true;
-      if (q) {
-        if (q.includes("under") || q.includes("<") || q.includes("budget")) {
-          const numMatch = q.match(/\d+/);
-          const limit = numMatch ? parseInt(numMatch[0], 10) : 50;
-          matchesSearch = p.selling_price <= limit;
-        } else {
-          matchesSearch = pName.includes(q) || catName.includes(q);
-        }
-      }
-
-      if (!matchesSearch) return false;
-
+      // Step 1: Base Products by Category Filter ("all" includes entire active catalog)
+      let matchesCategory = false;
       if (selectedCategory === "all") {
-        if (activeScheduledCategoryIDs !== null && !activeScheduledCategoryIDs.has(p.category_id)) {
-          return false;
-        }
-        return true;
+        matchesCategory = true;
+      } else if (selectedCategory === "combos") {
+        matchesCategory = pName.includes("combo") || catName.includes("combo");
+      } else if (selectedCategory === "deals") {
+        matchesCategory = p.mrp > p.selling_price || pName.includes("deal");
+      } else if (selectedCategory === "recommended") {
+        matchesCategory = recommendedProductIds.includes(p.id);
+      } else {
+        matchesCategory =
+          p.category_id === selectedCategory ||
+          (catObj && catObj.id === selectedCategory) ||
+          catName === selectedCategory.toLowerCase() ||
+          catName.includes(selectedCategory.toLowerCase());
       }
-      if (selectedCategory === "combos") return pName.includes("combo") || catName.includes("combo");
-      if (selectedCategory === "deals") return p.mrp > p.selling_price || pName.includes("deal");
-      if (selectedCategory === "recommended") return recommendedProductIds.includes(p.id);
 
-      return (
-        p.category_id === selectedCategory ||
-        (catObj && catObj.id === selectedCategory) ||
-        catName === selectedCategory.toLowerCase() ||
-        catName.includes(selectedCategory.toLowerCase())
-      );
+      if (!matchesCategory) return false;
+
+      // Step 2: Apply Search Filter over selected category base
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+
+      if (q.includes("under") || q.includes("<") || q.includes("budget")) {
+        const numMatch = q.match(/\d+/);
+        const limit = numMatch ? parseInt(numMatch[0], 10) : 50;
+        return p.selling_price <= limit;
+      }
+
+      return pName.includes(q) || catName.includes(q);
     });
 
     if (selectedCategory === "recommended") {
       res.sort((a: Product, b: Product) => recommendedProductIds.indexOf(a.id) - recommendedProductIds.indexOf(b.id));
     }
     return res;
-  }, [products, cleanCategories, activeScheduledCategoryIDs, selectedCategory, searchQuery, recommendedProductIds]);
+  }, [products, cleanCategories, selectedCategory, searchQuery, recommendedProductIds]);
 
   // Popular items with real order statistics where available
   const popularProducts = useMemo(() => {
