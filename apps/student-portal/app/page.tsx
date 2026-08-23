@@ -1323,7 +1323,7 @@ export default function StudentPortal() {
 
   const getTimeGreeting = () => {
     const hour = istDate.getHours();
-    const name = isLoggedIn && userProfile ? userProfile.short_name : "Friend";
+    const name = isLoggedIn && profile ? profile.short_name : "Friend";
 
     if (activeSchedule) {
       return {
