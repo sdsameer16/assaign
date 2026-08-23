@@ -23,6 +23,13 @@ export const FlyingRakhi: React.FC = () => {
     },
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("select-category-filter", { detail: "rakhi" }));
+    }
+  };
+
   return (
     <div className="fixed inset-0 pointer-events-none z-30 overflow-hidden">
       <motion.div
@@ -30,7 +37,11 @@ export const FlyingRakhi: React.FC = () => {
         variants={flightVariants}
         animate="animate"
       >
-        <div className="relative w-full">
+        <div
+          className="relative w-full cursor-pointer pointer-events-auto hover:scale-105 transition-transform"
+          onClick={handleClick}
+          title="Click to explore Rakhi Menu"
+        >
           {/* Subtle Motion Trail Glow Behind Flying Rakhi */}
           <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-3/4 h-24 bg-gradient-to-r from-amber-400/0 via-orange-400/25 to-amber-300/40 blur-xl rounded-full rakhi-motion-trail" />
 

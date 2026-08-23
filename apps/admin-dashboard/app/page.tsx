@@ -531,6 +531,25 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteCategory = async (cat: Category) => {
+    if (!window.confirm(`Are you sure you want to delete category "${cat.name}"? Products in this category will also be deleted.`)) {
+      return;
+    }
+    try {
+      setCategorySaving(true);
+      await adminApi.deleteCategory(cat.id);
+      const catData = await adminApi.getCategories();
+      setCategories(catData || []);
+      const prodData = await adminApi.getProducts();
+      setProducts(prodData || []);
+      showToast(`Category "${cat.name}" deleted.`, "success");
+    } catch (err: any) {
+      showToast("Failed to delete category: " + err.message, "error");
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !editProductName || !editProductPrice) return;
@@ -1882,6 +1901,31 @@ export default function AdminDashboard() {
                                 {categorySaving ? "..." : "Add"}
                               </button>
                             </div>
+                            {categories.length > 0 && (
+                              <div className="mt-2.5 p-2 bg-slate-950/70 border border-slate-800 rounded-lg space-y-1.5">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                                  Catalog Categories ({categories.length}):
+                                </span>
+                                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                                  {categories.map((cat) => (
+                                    <span
+                                      key={cat.id}
+                                      className="inline-flex items-center space-x-1 bg-slate-900 border border-slate-800 text-slate-300 text-[11px] font-semibold px-2 py-0.5 rounded-md"
+                                    >
+                                      <span>{cat.name}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteCategory(cat)}
+                                        title={`Delete ${cat.name}`}
+                                        className="text-slate-500 hover:text-red-400 transition ml-0.5 p-0.5"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>

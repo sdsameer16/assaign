@@ -135,6 +135,11 @@ export const adminApi = {
       body: JSON.stringify({ name }),
     }),
 
+  deleteCategory: (id: string) =>
+    apiRequest<{ message: string }>(`/categories/${id}`, {
+      method: "DELETE",
+    }),
+
   // Products CRUD
   getProducts: () => apiRequest<Product[]>("/products"),
 

@@ -254,6 +254,40 @@ func (h *HandlerContext) CreateCategory(w http.ResponseWriter, r *http.Request) 
 	RespondJSON(w, http.StatusCreated, models.Category{ID: id, Name: name})
 }
 
+// DeleteCategory deletes a category and its associated schedule mappings / products.
+func (h *HandlerContext) DeleteCategory(w http.ResponseWriter, r *http.Request) {
+	adminID := r.Context().Value("user_id").(string)
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		RespondError(w, http.StatusBadRequest, "category ID is required")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Delete schedule mappings for this category
+	_, _ = h.DB.Pool.Exec(ctx, `DELETE FROM menu_schedule_categories WHERE category_id = $1`, id)
+
+	// Delete products associated with this category
+	_, _ = h.DB.Pool.Exec(ctx, `DELETE FROM products WHERE category_id = $1`, id)
+
+	// Delete category record
+	tag, err := h.DB.Pool.Exec(ctx, `DELETE FROM categories WHERE id = $1`, id)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "failed to delete category: "+err.Error())
+		return
+	}
+
+	if tag.RowsAffected() == 0 {
+		RespondError(w, http.StatusNotFound, "category not found")
+		return
+	}
+
+	_ = h.AuditService.LogAction(ctx, adminID, "admin", "Deleted category ID: "+id, r)
+
+	RespondJSON(w, http.StatusOK, map[string]string{"message": "category deleted successfully"})
+}
+
 func (h *HandlerContext) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	adminID := r.Context().Value("user_id").(string)
 	var req CreateProductRequest

@@ -37,6 +37,13 @@ export const MovingGiftBox: React.FC = () => {
     },
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("select-category-filter", { detail: "gifts" }));
+    }
+  };
+
   return (
     <div className="fixed inset-0 pointer-events-none z-30 overflow-hidden">
       {/* Trajectory Motion Container (Bottom-Right to Top-Left) */}
@@ -47,7 +54,9 @@ export const MovingGiftBox: React.FC = () => {
       >
         {/* Volumetric 3D Perspective Container */}
         <div
-          className="relative w-full h-full flex items-center justify-center"
+          className="relative w-full h-full flex items-center justify-center cursor-pointer pointer-events-auto hover:scale-105 transition-transform"
+          onClick={handleClick}
+          title="Click to explore Gifts & Festive Items"
           style={{ perspective: 1000, transformStyle: "preserve-3d" }}
         >
           {/* Smooth Volumetric 3D Motion Container */}

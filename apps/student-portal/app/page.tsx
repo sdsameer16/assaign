@@ -368,6 +368,8 @@ export default function StudentPortal() {
     }
   }, []);
 
+
+
   const handleDismissBanner = (orderID: string) => {
     const updated = [...dismissedBannerIDs, orderID];
     setDismissedBannerIDs(updated);
@@ -1387,6 +1389,34 @@ export default function StudentPortal() {
     );
   }, [categories]);
 
+  useEffect(() => {
+    const handleSelectCategoryFilter = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      const searchKey = (customEvent.detail || "").toLowerCase().trim();
+      if (!searchKey) return;
+
+      const match = cleanCategories.find((c) => {
+        const name = c.name.toLowerCase();
+        return name.includes(searchKey) || searchKey.includes(name);
+      });
+
+      if (match) {
+        setSelectedCategory(match.id);
+      } else {
+        const rakhiMatch = cleanCategories.find((c) => c.name.toLowerCase().includes("rakhi"));
+        if (rakhiMatch) {
+          setSelectedCategory(rakhiMatch.id);
+        } else {
+          setSearchQuery(searchKey);
+        }
+      }
+      scrollToMenu();
+    };
+
+    window.addEventListener("select-category-filter", handleSelectCategoryFilter);
+    return () => window.removeEventListener("select-category-filter", handleSelectCategoryFilter);
+  }, [cleanCategories]);
+
   // Derived recommendation IDs based on order history
   const recommendedProductIds = useMemo(() => {
     if (!orderHistory || orderHistory.length === 0) return [];
@@ -1399,19 +1429,14 @@ export default function StudentPortal() {
     return Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
   }, [orderHistory]);
 
-  // Main UI Food Category Tabs (Dynamic & Driven by Admin Menu Schedule)
+  // Main UI Food Category Tabs (Dynamic & Driven by Admin DB Product Categories)
   const foodCategoryList = useMemo(() => {
     const list: Array<{ id: string; name: string; icon: string }> = [
       { id: "all", name: "All Items", icon: "🍽️" },
     ];
 
-    // Filter DB categories allowed by active schedule
-    let allowedCategories = cleanCategories;
-    if (activeScheduledCategoryIDs !== null) {
-      allowedCategories = cleanCategories.filter((c) => activeScheduledCategoryIDs.has(c.id));
-    }
-
-    allowedCategories.forEach((c) => {
+    // Build categories directly from database catalog categories
+    cleanCategories.forEach((c) => {
       const catLower = c.name.toLowerCase();
       let icon = "🍱";
       if (catLower.includes("stationery") || catLower.includes("paper") || catLower.includes("pen")) icon = "✏️";
@@ -1435,21 +1460,16 @@ export default function StudentPortal() {
       list.splice(1, 0, { id: "recommended", name: "Recommended", icon: "⭐" });
     }
     return list;
-  }, [cleanCategories, activeScheduledCategoryIDs, isLoggedIn, recommendedProductIds.length]);
+  }, [cleanCategories, isLoggedIn, recommendedProductIds.length]);
 
-  // Dynamic Product Filters (Filtered by Active Schedule & Search / Category Selection)
+  // Dynamic Product Filters (Filtered by Search / Category Selection)
   const filteredProducts = useMemo(() => {
     const res = products.filter((p) => {
-      // 1. Check if product category is permitted in current active schedule
-      if (activeScheduledCategoryIDs !== null && !activeScheduledCategoryIDs.has(p.category_id)) {
-        return false;
-      }
-
-      const q = searchQuery.toLowerCase().trim();
       const catObj = cleanCategories.find((c) => c.id === p.category_id);
       const catName = catObj ? catObj.name.toLowerCase() : "";
       const pName = p.name.toLowerCase();
 
+      const q = searchQuery.toLowerCase().trim();
       let matchesSearch = true;
       if (q) {
         if (q.includes("under") || q.includes("<") || q.includes("budget")) {
@@ -1463,12 +1483,22 @@ export default function StudentPortal() {
 
       if (!matchesSearch) return false;
 
-      if (selectedCategory === "all") return true;
+      if (selectedCategory === "all") {
+        if (activeScheduledCategoryIDs !== null && !activeScheduledCategoryIDs.has(p.category_id)) {
+          return false;
+        }
+        return true;
+      }
       if (selectedCategory === "combos") return pName.includes("combo") || catName.includes("combo");
       if (selectedCategory === "deals") return p.mrp > p.selling_price || pName.includes("deal");
       if (selectedCategory === "recommended") return recommendedProductIds.includes(p.id);
 
-      return p.category_id === selectedCategory || catName === selectedCategory.toLowerCase() || catName.includes(selectedCategory.toLowerCase());
+      return (
+        p.category_id === selectedCategory ||
+        (catObj && catObj.id === selectedCategory) ||
+        catName === selectedCategory.toLowerCase() ||
+        catName.includes(selectedCategory.toLowerCase())
+      );
     });
 
     if (selectedCategory === "recommended") {
@@ -2400,33 +2430,28 @@ export default function StudentPortal() {
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
-            {[
-              { label: "🍳 Breakfast", cat: "breakfast" },
-              { label: "🍗 Biryani", cat: "biryani" },
-              { label: "🍲 Meals", cat: "meals" },
-              { label: "🍔 Fast Food", cat: "fast food" },
-              { label: "🍿 Snacks", cat: "snacks" },
-              { label: "🥤 Drinks", cat: "beverages" },
-              { label: "🖨️ Printing", cat: "printing" },
-            ].map((item) => (
-              <button
-                key={item.cat}
-                onClick={() => {
-                  if (item.cat === "printing") {
-                    setShowPrintingsModal(true);
-                  } else {
-                    setSelectedCategory(item.cat);
-                    scrollToMenu();
-                  }
-                }}
-                className={`border px-3 py-1 rounded-lg transition font-medium cursor-pointer ${theme === "dark"
-                  ? "bg-slate-800/80 hover:bg-orange-500 hover:text-slate-950 border-slate-700/60 text-slate-300"
-                  : "bg-white hover:bg-orange-500 hover:text-white border-slate-300 text-slate-800 shadow-sm"
-                  }`}
-              >
-                {item.label}
-              </button>
-            ))}
+            {foodCategoryList
+              .filter((cat) => cat.id !== "all" && cat.id !== "recommended")
+              .map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    if (item.id === "printing") {
+                      setShowPrintingsModal(true);
+                    } else {
+                      setSelectedCategory(item.id);
+                      scrollToMenu();
+                    }
+                  }}
+                  className={`border px-3 py-1 rounded-lg transition font-medium cursor-pointer ${theme === "dark"
+                    ? "bg-slate-800/80 hover:bg-orange-500 hover:text-slate-950 border-slate-700/60 text-slate-300"
+                    : "bg-white hover:bg-orange-500 hover:text-white border-slate-300 text-slate-800 shadow-sm"
+                    }`}
+                >
+                  <span className="mr-1">{item.icon}</span>
+                  <span>{item.name}</span>
+                </button>
+              ))}
           </div>
 
 
@@ -2781,7 +2806,13 @@ export default function StudentPortal() {
             {foodCategoryList.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => {
+                  if (cat.id === "printing") {
+                    setShowPrintingsModal(true);
+                  } else {
+                    setSelectedCategory(cat.id);
+                  }
+                }}
                 className={`px-4 py-2.5 rounded-2xl font-bold text-xs shrink-0 flex items-center space-x-2 border transition ${selectedCategory === cat.id
                   ? "bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/20"
                   : theme === "dark"
@@ -2793,15 +2824,6 @@ export default function StudentPortal() {
                 <span>{cat.name}</span>
               </button>
             ))}
-
-            {/* Printing Tab Service */}
-            <button
-              onClick={() => setShowPrintingsModal(true)}
-              className="px-4 py-2.5 rounded-2xl font-bold text-xs shrink-0 flex items-center space-x-2 bg-orange-500 hover:bg-orange-600 text-slate-950 transition border border-orange-400 shadow-sm"
-            >
-              <Printer className="w-4 h-4 text-slate-950" />
-              <span>🖨️ Printing Service</span>
-            </button>
           </div>
         </section>
 
@@ -2886,8 +2908,13 @@ export default function StudentPortal() {
         {/* Main Product Catalog Grid */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className={`text-lg font-extrabold capitalize ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
-              {selectedCategory === "all" ? "Full Food Menu" : selectedCategory} ({filteredProducts.length})
+            <h3 className={`text-lg font-extrabold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+              {selectedCategory === "all"
+                ? "Full Food Menu"
+                : (() => {
+                    const catObj = foodCategoryList.find((c) => c.id === selectedCategory) || cleanCategories.find((c) => c.id === selectedCategory);
+                    return catObj ? `${catObj.icon ? catObj.icon + " " : ""}${catObj.name}` : selectedCategory;
+                  })()} ({filteredProducts.length})
             </h3>
           </div>
 

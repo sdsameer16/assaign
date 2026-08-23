@@ -75,6 +75,7 @@ func NewRouter(hCtx *handlers.HandlerContext) http.Handler {
 				r.Get("/dashboard/summary", hCtx.GetDashboardSummary)
 				r.Get("/categories", hCtx.ListCategories)
 				r.Post("/categories", hCtx.CreateCategory)
+				r.Delete("/categories/{id}", hCtx.DeleteCategory)
 				r.Get("/products", hCtx.ListProducts)
 				r.Post("/products", hCtx.CreateProduct)
 				r.Put("/products/{id}", hCtx.UpdateProduct)

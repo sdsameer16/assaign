@@ -246,23 +246,28 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 		}
 	}
 
-	// 2. Seed categories and products if empty
-	var catCount int
-	err = db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM categories`).Scan(&catCount)
-	if err == nil && catCount == 0 {
-		// Insert Categories
-		categories := []string{"Snacks", "Beverages", "Meals", "Ice Creams"}
-		catIDs := make(map[string]string)
+	// 2. Seed default categories and products if missing
+	defaultCategories := []string{"Breakfast", "Biryani", "Meals", "Fast Food", "Snacks", "Beverages", "Ice Creams", "Rakhi"}
+	catIDs := make(map[string]string)
 
-		for _, name := range categories {
-			var id string
-			err = db.Pool.QueryRow(ctx, `INSERT INTO categories (name) VALUES ($1) RETURNING id`, name).Scan(&id)
-			if err == nil {
-				catIDs[name] = id
-			}
+	for _, name := range defaultCategories {
+		var id string
+		err = db.Pool.QueryRow(ctx, `
+			INSERT INTO categories (name) VALUES ($1)
+			ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+			RETURNING id`, name).Scan(&id)
+		if err != nil {
+			_ = db.Pool.QueryRow(ctx, `SELECT id FROM categories WHERE name = $1`, name).Scan(&id)
 		}
+		if id != "" {
+			catIDs[name] = id
+		}
+	}
 
-		// Insert Products
+	var prodCount int
+	err = db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM products`).Scan(&prodCount)
+	if err == nil && prodCount == 0 {
+		// Insert Default Sample Products
 		products := []struct {
 			name        string
 			category    string
@@ -272,10 +277,15 @@ func seedDatabase(db *database.DB, authService *services.AuthService) {
 			isAvailable bool
 		}{
 			{"Crispy Samosa", "Snacks", 15.00, 12.00, "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?w=300", true},
-			{"Veg Burger Combo", "Meals", 120.00, 99.00, "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300", true},
+			{"Veg Burger Combo", "Fast Food", 120.00, 99.00, "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300", true},
 			{"Masala Tea", "Beverages", 12.00, 10.00, "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=300", true},
 			{"Cold Coffee", "Beverages", 45.00, 39.00, "https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=300", true},
 			{"French Fries", "Snacks", 60.00, 49.00, "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=300", true},
+			{"Hyderabadi Chicken Biryani", "Biryani", 180.00, 150.00, "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300", true},
+			{"North Indian Thali", "Meals", 140.00, 120.00, "https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?w=300", true},
+			{"Butter Masala Dosa", "Breakfast", 70.00, 60.00, "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=300", true},
+			{"Chocolate Ice Cream Sundae", "Ice Creams", 80.00, 69.00, "https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=300", true},
+			{"Designer Kundan Rakhi", "Rakhi", 99.00, 79.00, "https://images.unsplash.com/photo-1628178129339-44f21db5976b?w=300", true},
 		}
 
 		for _, p := range products {
