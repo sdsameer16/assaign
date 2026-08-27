@@ -66,6 +66,46 @@ func validateSlotTimes(start, end, cutoff string) error {
 	return nil
 }
 
+func (h *HandlerContext) checkSlotTimeOverlap(ctx context.Context, start, end, excludeID string) error {
+	query := `
+		SELECT name, TO_CHAR(delivery_start, 'HH24:MI'), TO_CHAR(delivery_end, 'HH24:MI')
+		FROM delivery_slots
+		WHERE is_active = true
+	`
+	args := []interface{}{}
+	if excludeID != "" {
+		query += " AND id != $1"
+		args = append(args, excludeID)
+	}
+
+	rows, err := h.DB.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	sh, sm, _ := parseTimeStr(start)
+	eh, em, _ := parseTimeStr(end)
+	newStart := sh*60 + sm
+	newEnd := eh*60 + em
+
+	for rows.Next() {
+		var name, dStart, dEnd string
+		if err := rows.Scan(&name, &dStart, &dEnd); err != nil {
+			continue
+		}
+		eSh, eSm, _ := parseTimeStr(dStart)
+		eEh, eEm, _ := parseTimeStr(dEnd)
+		exStart := eSh*60 + eSm
+		exEnd := eEh*60 + eEm
+
+		if newStart < exEnd && newEnd > exStart {
+			return fmt.Errorf("delivery window (%s - %s) overlaps with existing slot '%s' (%s - %s)", start, end, name, dStart, dEnd)
+		}
+	}
+	return nil
+}
+
 func isSlotOrderingOpen(orderCutoff string, now time.Time) bool {
 	ch, cm, err := parseTimeStr(orderCutoff)
 	if err != nil {
@@ -177,6 +217,10 @@ func (h *HandlerContext) CreateDeliverySlot(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := h.checkSlotTimeOverlap(r.Context(), start, end, ""); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	active := true
 	if req.IsActive != nil {
@@ -236,6 +280,10 @@ func (h *HandlerContext) UpdateDeliverySlot(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := validateSlotTimes(start, end, cutoff); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.checkSlotTimeOverlap(r.Context(), start, end, slotID); err != nil {
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}

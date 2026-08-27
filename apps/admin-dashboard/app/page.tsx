@@ -129,7 +129,7 @@ export default function AdminDashboard() {
     [],
   );
   const [deliverySlots, setDeliverySlots] = useState<any[]>([]);
-  const [slotFormName, setSlotFormName] = useState("");
+  const [slotFormName, setSlotFormName] = useState("Slot - 1");
   const [slotFormStart, setSlotFormStart] = useState("09:55");
   const [slotFormEnd, setSlotFormEnd] = useState("10:10");
   const [slotFormCutoff, setSlotFormCutoff] = useState("09:45");
@@ -584,7 +584,39 @@ export default function AdminDashboard() {
 
   const resetSlotForm = () => {
     setEditingSlotId(null);
-    setSlotFormName("");
+    const nextSlotNum = (deliverySlots?.length || 0) + 1;
+    setSlotFormName(`Slot - ${nextSlotNum}`);
+
+    if (deliverySlots && deliverySlots.length > 0) {
+      let maxEndMin = 0;
+      deliverySlots.forEach((slot: any) => {
+        if (slot.delivery_end) {
+          const parts = slot.delivery_end.split(":");
+          if (parts.length === 2) {
+            const min = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+            if (min > maxEndMin) maxEndMin = min;
+          }
+        }
+      });
+
+      if (maxEndMin > 0 && maxEndMin + 45 < 24 * 60) {
+        const startMin = maxEndMin + 30;
+        const endMin = startMin + 15;
+        const cutoffMin = startMin - 15;
+
+        const formatMin = (m: number) => {
+          const hh = String(Math.floor(m / 60)).padStart(2, "0");
+          const mm = String(m % 60).padStart(2, "0");
+          return `${hh}:${mm}`;
+        };
+
+        setSlotFormStart(formatMin(startMin));
+        setSlotFormEnd(formatMin(endMin));
+        setSlotFormCutoff(formatMin(cutoffMin));
+        return;
+      }
+    }
+
     setSlotFormStart("09:55");
     setSlotFormEnd("10:10");
     setSlotFormCutoff("09:45");
@@ -596,6 +628,41 @@ export default function AdminDashboard() {
       showToast("Fill all slot fields.", "error");
       return;
     }
+
+    const parseMin = (tStr: string) => {
+      const parts = tStr.split(":");
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    };
+
+    const startMin = parseMin(slotFormStart);
+    const endMin = parseMin(slotFormEnd);
+    const cutoffMin = parseMin(slotFormCutoff);
+
+    if (startMin >= endMin) {
+      showToast("Delivery start time must be before delivery end time.", "error");
+      return;
+    }
+    if (cutoffMin >= startMin) {
+      showToast("Order cutoff time must be before delivery start time.", "error");
+      return;
+    }
+
+    const overlapSlot = deliverySlots.find((slot: any) => {
+      if (editingSlotId && slot.id === editingSlotId) return false;
+      if (!slot.is_active) return false;
+      const sStart = parseMin(slot.delivery_start);
+      const sEnd = parseMin(slot.delivery_end);
+      return startMin < sEnd && endMin > sStart;
+    });
+
+    if (overlapSlot) {
+      showToast(
+        `Time window (${slotFormStart} - ${slotFormEnd}) overlaps with existing slot "${overlapSlot.name}" (${overlapSlot.delivery_start} - ${overlapSlot.delivery_end}).`,
+        "error"
+      );
+      return;
+    }
+
     try {
       setSlotSaving(true);
       const payload = {
@@ -611,9 +678,9 @@ export default function AdminDashboard() {
         await adminApi.createDeliverySlot(payload);
         showToast("Delivery slot added.", "success");
       }
-      resetSlotForm();
       const slotData = await adminApi.getDeliverySlots();
       setDeliverySlots(slotData || []);
+      resetSlotForm();
     } catch (err: any) {
       showToast(err.message || "Failed to save slot", "error");
     } finally {
@@ -2253,7 +2320,7 @@ export default function AdminDashboard() {
                         type="text"
                         value={slotFormName}
                         onChange={(e) => setSlotFormName(e.target.value)}
-                        placeholder="Morning Slot"
+                        placeholder="e.g. Evening Slot"
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white outline-none"
                         required
                       />
