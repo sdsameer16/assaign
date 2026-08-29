@@ -15,7 +15,7 @@ export interface CampaignConfig {
 export const rakhiCampaignConfig: CampaignConfig = {
   id: "raksha-bandhan-2026",
   name: "Raksha Bandhan Festival",
-  enabled: true,
+  enabled: false,
   startDate: "2026-08-22",
   endDate: "2026-08-31",
 };
